@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS= -m32 -fno-stack-protector -z execstack -D_FORTIFY_SOURCE=0 -g -mpreferred-stack-boundary=2 #--static
+CFLAGS= -m32 -fno-stack-protector -z execstack -D_FORTIFY_SOURCE=0 -g -mpreferred-stack-boundary=2# --static
 #LFLAGS=
 EXECS = $(patsubst %.c, %, $(wildcard *.c))
 
@@ -12,7 +12,7 @@ default: all
 all: $(EXECS)
 
 # Compile code to object files
-%.o: %.c
+%.o: %.s
 	$(CC) $(CFLAGS) -c $<
 
 # Compile code to assembly

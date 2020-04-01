@@ -1,7 +1,10 @@
 # Executables
 example*
-overflow*
 testsc*
+overflow*
+exploit*
+sp
+vulnerable
 !*.c
 
 # Prerequisites
