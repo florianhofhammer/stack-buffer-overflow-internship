@@ -38,3 +38,41 @@ ret
 `leave` destroys a stack frame and thus restores the stack pointer from `ebp`.
 Thus, `esp` has the good value after `leave` and the first value on the stack is the address of the buffer.
 Therefore, `ret` jumps to the buffer address and thus to our shellcode.
+
+## vulnerable.c
+
+For this executable, the input to overflow the buffer correctly is provided by `exploit2` or `exploit3`.
+
+### exploit2
+
+This executable is compiled from `exploit2.c`.
+It takes two arguments: a buffer size and an offset.
+The buffer size tells the executable how many bytes should be filled with the shellcode and padded with the stack address and the offset manipulates the stack address to be written into the buffer.
+
+This approach requires to exactly provide the correct buffer address in order to overwrite the return address with exactly the address of the start of the shellcode.
+This implies that being off by only a single byte probably causes the program to crash instead of spawning a shell.
+
+With modern compilers (`gcc 9.2.1`), the stack offset is different than that given in Aleph1's original paper: instead of calling `exploit2 600 1564` for a buffer size of 600 bytes filled with shellcode and stack address as well as an offset of 1564 bytes from the base stack address, it is sufficient to call `exploit2 600` which doesn't use an offset at all.
+
+### exploit3
+
+`exploit3` works exactly the same way as `exploit2` but instead of just writing the shellcode to the buffer, it fills half of the buffer with `NOP` instructions (`0x90` on x86) before writing the shellcode to the buffer.
+
+This makes it easier to execute the shellcode, as it is not necessary to exactly hit the buffer address where the shellcode resides when overwriting the return address.
+It now is completely sufficient to overwrite the return address with an arbitrary address pointing into the first half of the buffer which gives us a certain degree of freedom and error resilience.
+
+However, it is again not possible to just issue the call provided in the original paper (`exploit3 600`).
+When debugging the `vulnerable` executable, it is easy to see that the return address in fact points into the buffer but only at a part of the buffer where the stack address resides (i.e. to a part of the buffer after the NOP sled and the shellcode).
+Because of the NOP sled in front of the shellcode, it is then pretty easy to find an offset that reliably lets the program return onto the stack where our shellcode resides (e.g. `exploit3 600 350` or `exploit 600 400`).
+
+### exploit4
+
+`exploit4` works just like `exploit3` but instead of writing the NOP sled and the shellcode to the buffer, it writes them to an environment variable and only an address pointing to that variable into the buffer.
+This way, we're not restricted by the buffer size concerning our NOP sled but we can make it as big as we want it to be.
+
+However, a similar problem compared to `exploit3` occurs with `exploit4`.
+As the compiler and runtime on modern machines differ from the ones used by Aleph1, it is necessary to add an offset.
+Calling `exploit4 600` and then `vulnerable $RET` is not sufficient and only yields a segmentation fault.
+When debugging the `vulnerable` executable, it is easy to see that the return address is correctly rewritten by the input given in the environment variable `RET` but that the address in that environment variable is way too low.
+Thus, we have to increase the address in order to jump into the NOP sled inside the environment variable `EGG`.
+Calling e.g. `exploit4 600 -2000` gives a working offset so that the address saved in `RET` points into the NOP sled saved in `EGG`.
