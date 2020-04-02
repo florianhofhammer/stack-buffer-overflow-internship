@@ -5,6 +5,7 @@ overflow*
 exploit*
 sp
 vulnerable
+eggshell
 !*.c
 
 # Prerequisites

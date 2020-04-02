@@ -3,6 +3,7 @@
 As a starting exercise, I am trying to recreate the examples and exploits from the original paper.
 The compiler flags for `gcc` generally used are `-m32 -fno-stack-protector -z execstack -D_FORTIFY_SOURCE=0`.
 Without those, current stack overflow mitigation measures do not allow to successfully overflow the buffers on the stack as described in the paper.
+Additionally, ASLR is deactivated on the machine.
 
 ## example3.c
 The executable only provided a segfault because the return address was incorrectly overwritten (checked with `gdb`).
@@ -26,6 +27,7 @@ As we overwrite the stack with the buffer address, `esp` then points before the 
 Thus, the `ret` instruction fetches the wrong address and the exploit doesn't work.
 
 After having a lot of problems with this issue, I found a comment online suggesting to add the `-mpreferred-stack-boundary=2` compiler flag which instructs `gcc` to align on 4 bytes (2^2) instead of 16 bytes.
+__This additional flag is used throughout all of the following examples!__
 With this change, the same part of the assembly code was generated as follows:
 
 ```asm
@@ -41,7 +43,8 @@ Therefore, `ret` jumps to the buffer address and thus to our shellcode.
 
 ## vulnerable.c
 
-For this executable, the input to overflow the buffer correctly is provided by `exploit2` or `exploit3`.
+For this executable, the input to overflow the buffer correctly is provided by `exploit2`, `exploit3`, `exploit4` or `eggshell`.
+All of those executables can of course also be used for other vulnerable programs, not only for the example program given here.
 
 ### exploit2
 
@@ -76,3 +79,19 @@ Calling `exploit4 600` and then `vulnerable $RET` is not sufficient and only yie
 When debugging the `vulnerable` executable, it is easy to see that the return address is correctly rewritten by the input given in the environment variable `RET` but that the address in that environment variable is way too low.
 Thus, we have to increase the address in order to jump into the NOP sled inside the environment variable `EGG`.
 Calling e.g. `exploit4 600 -2000` gives a working offset so that the address saved in `RET` points into the NOP sled saved in `EGG`.
+
+### eggshell
+
+The `eggshell` executable basically does the same thing as `exploit4`.
+The difference is that it is suitable for different processor architectures and also has a more sophisticated command line interface.
+It also writes the overflow buffer to the environment variable `BOF` instead of `RET`.
+
+However, the original version by Aleph1 contains an error: when creating the NOP sled, the stop condition is tested by `i <= eggsize ...`.
+Therefore, the pointer into the egg buffer `ptr` is incremented once too often so that setting `egg[eggsize - 1] = '\0';` later in the code overwrites the last byte of the shellcode instead of just appending a zero byte to the NOP sled and shellcode.
+Thus, the shellcode tries to execute `/bin/s` instead of `/bin/sh`, which of course doesn't yield the expected result.
+
+Changing the comparison from `i <= eggsize ...` to `i < eggsize ...` fixes that problem, as one less NOP instruction is written to the egg buffer and thus the actual shellcode starts at a lower position in the buffer.
+
+Again, providing no offset, the address in `BOF` does not point to the `EGG` environment variable.
+Just like with `exploit4`, it is easy to find a fitting offset with a debugger by looking at the difference of the provided (incorrect) address and the address of the `EGG` variable (e.g. by issuing `search "EGG"` in `gdb` with the `pwndbg` plugin).
+Thus, calling e.g. `eggshell -b 600 -o -3000` lets us spawn a shell from the `vulnerable` executable.
