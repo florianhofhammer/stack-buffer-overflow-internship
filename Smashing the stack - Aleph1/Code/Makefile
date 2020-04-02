@@ -1,6 +1,6 @@
 CC=gcc
-CFLAGS= -m32 -fno-stack-protector -z execstack -D_FORTIFY_SOURCE=0 -g -mpreferred-stack-boundary=2# --static
-#LFLAGS=
+CFLAGS= -m32 -fno-stack-protector -z execstack -D_FORTIFY_SOURCE=0 -g -mpreferred-stack-boundary=2
+LFLAGS=
 EXECS = $(patsubst %.c, %, $(wildcard *.c))
 
 .PHONY: default all

@@ -1,9 +1,19 @@
+# Virtual Machine setup
+
+The virtual machine used for the experiments is based on Ubuntu 19.10 Desktop.
+Updates are regularly installed to keep the system up to date.
+
+As the GDB version 8.3 included in the default Ubuntu repositories kept crashing, I installed GDB 9.1 from the source provided on the [official website](https://www.gnu.org/software/gdb/).
+Additionally, I installed `peda`, `pwndbg` and `gef` for easier debugging using an install script from a [GitHub repository](https://github.com/apogiatzis/gdb-peda-pwndbg-gef).
+
+Apart from that, no changes to the system were made.
+
 # Smashing the Stack for fun and profit - Aleph1
 
 As a starting exercise, I am trying to recreate the examples and exploits from the original paper.
-The compiler flags for `gcc` generally used are `-m32 -fno-stack-protector -z execstack -D_FORTIFY_SOURCE=0`.
+The compiler flags for `gcc` generally used are `-m32 -fno-stack-protector -z execstack -D_FORTIFY_SOURCE=0` (see e.g. the [Makefile](./Smashing\ the\ stack\ -\ Aleph1/Code/Makefile)).
 Without those, current stack overflow mitigation measures do not allow to successfully overflow the buffers on the stack as described in the paper.
-Additionally, ASLR is deactivated on the machine.
+Additionally, ASLR is permanently deactivated on the machine by issuing the command `echo "kernel.randomize_va_space = 0" | sudo tee /etc/sysctl.d/01-disable-aslr.conf`.
 
 ## example3.c
 The executable only provided a segfault because the return address was incorrectly overwritten (checked with `gdb`).
