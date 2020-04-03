@@ -13,7 +13,7 @@ Apart from that, no changes to the system were made.
 
 # Smashing the Stack for fun and profit - Aleph1
 
-As a starting exercise, I am trying to recreate the examples and exploits from the original paper.
+As a starting exercise, I am trying to recreate the examples and exploits from the [original paper](http://phrack.org/issues/49/14.html#article).
 The compiler flags for `gcc` generally used are `-m32 -fno-stack-protector -z execstack -D_FORTIFY_SOURCE=0` (see e.g. the [Makefile](./Smashing\ the\ stack\ -\ Aleph1/Code/Makefile)).
 Without those, current stack overflow mitigation measures do not allow to successfully overflow the buffers on the stack as described in the paper.
 Additionally, ASLR is permanently deactivated on the machine by issuing the command `echo "kernel.randomize_va_space = 0" | sudo tee /etc/sysctl.d/01-disable-aslr.conf`.
@@ -108,3 +108,7 @@ Changing the comparison from `i <= eggsize ...` to `i < eggsize ...` fixes that 
 Again, providing no offset, the address in `BOF` does not point to the `EGG` environment variable.
 Just like with `exploit4`, it is easy to find a fitting offset with a debugger by looking at the difference of the provided (incorrect) address and the address of the `EGG` variable (e.g. by issuing `search "EGG"` in `gdb` with the `pwndbg` plugin).
 Thus, calling e.g. `eggshell -b 600 -o -2000` lets us spawn a shell from the `vulnerable` executable.
+
+
+# 64-bit Linux stack smashing
+
