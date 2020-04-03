@@ -14,7 +14,7 @@ Apart from that, no changes to the system were made.
 # Smashing the Stack for fun and profit - Aleph1
 
 As a starting exercise, I am trying to recreate the examples and exploits from the [original paper](http://phrack.org/issues/49/14.html#article).
-The compiler flags for `gcc` generally used are `-m32 -fno-stack-protector -z execstack -D_FORTIFY_SOURCE=0` (see e.g. the [Makefile](./Smashing\ the\ stack\ -\ Aleph1/Code/Makefile)).
+The compiler flags for `gcc` generally used are `-m32 -fno-stack-protector -z execstack -D_FORTIFY_SOURCE=0` (see e.g. the [Makefile](./Makefile.common)).
 Without those, current stack overflow mitigation measures do not allow to successfully overflow the buffers on the stack as described in the paper.
 Additionally, ASLR is permanently deactivated on the machine by issuing the command `echo "kernel.randomize_va_space = 0" | sudo tee /etc/sysctl.d/01-disable-aslr.conf`.
 
@@ -111,4 +111,14 @@ Thus, calling e.g. `eggshell -b 600 -o -2000` lets us spawn a shell from the `vu
 
 
 # 64-bit Linux stack smashing
+
+This tutorial found on <https://blog.techorganic.com> is about exploiting stack buffer overflows on 64 bit machines and consists of three parts.
+
+## Part 1
+
+In the first part, a classical stack buffer overflow is conducted with all the protection mechanisms turned off (NX bit, canaries, ASLR).
+The attack is conducted by writing the shellcode to an environment variable, calculating the address of the environment variable on the stack and overwriting the return address of the function `vuln()` from [vulnerable.c](./64bit%20Stack%20smashing%20-%20superkojiman/vulnerable.c).
+
+This is a pretty simple exploit, it does not even use tricks like NOP sleds in front of the shellcode.
+The whole exploit can be conducted by executing the [pwn_vulnerable.sh](./64bit%20Stack%20smashing%20-%20superkojiman/pwn_vulnerable.sh) shellscript which does all the calculation and formatting.
 
