@@ -4,7 +4,10 @@ The virtual machine used for the experiments is based on Ubuntu 19.10 Desktop.
 Updates are regularly installed to keep the system up to date.
 
 As the GDB version 8.3 included in the default Ubuntu repositories kept crashing, I installed GDB 9.1 from the source provided on the [official website](https://www.gnu.org/software/gdb/).
-Additionally, I installed `peda`, `pwndbg` and `gef` for easier debugging using an install script from a [GitHub repository](https://github.com/apogiatzis/gdb-peda-pwndbg-gef).
+Additionally, I installed `peda`, `pwndbg` and `gef` for easier debugging using an install script from a [GitHub repository](https://github.com/apogiatzis/gdb-peda-pwndbg-gef).   
+I also mounted the directory containing the internship data and files into the virtual machine and installed the OpenSSH Server to be able to `ssh` into the virtual machine and execute all the code whilst not having to make any changes to the host machine.
+It is, however, important to point out that if accessing a shell via `ssh` in the VM, the stack addresses differ from those when directly opening a terminal in the VM.
+In addition, the `ssh` session adds additional information to the environment by setting environment variables which might lead to different offsets on the stack.
 
 Apart from that, no changes to the system were made.
 
@@ -104,4 +107,4 @@ Changing the comparison from `i <= eggsize ...` to `i < eggsize ...` fixes that 
 
 Again, providing no offset, the address in `BOF` does not point to the `EGG` environment variable.
 Just like with `exploit4`, it is easy to find a fitting offset with a debugger by looking at the difference of the provided (incorrect) address and the address of the `EGG` variable (e.g. by issuing `search "EGG"` in `gdb` with the `pwndbg` plugin).
-Thus, calling e.g. `eggshell -b 600 -o -3000` lets us spawn a shell from the `vulnerable` executable.
+Thus, calling e.g. `eggshell -b 600 -o -2000` lets us spawn a shell from the `vulnerable` executable.

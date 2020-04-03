@@ -32,5 +32,5 @@ cleanobj:
 cleanasm:
 	-rm *.s
 # Remove executables
-clean: cleanobj
-	-rm *.s $(EXECS)
+clean: cleanobj cleanasm
+	-rm $(EXECS)
