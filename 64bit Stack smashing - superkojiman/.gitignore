@@ -1,6 +1,7 @@
 # Executables
 getenvaddress
 vulnerable
+leak
 !*.c
 
 # Prerequisites

