@@ -1,9 +1,6 @@
 # This makefile is used for building executables for all .c source files in a directory.
-# By default, it builds without stack canaries, an executable stack and without checking for buffer overflows.
 
 CC=gcc
-CFLAGS= -fno-stack-protector -z execstack -D_FORTIFY_SOURCE=0 -g $(EXTRAFLAGS)
-LFLAGS=
 EXECS = $(patsubst %.c, %, $(wildcard *.c))
 
 .PHONY: default all
@@ -22,9 +19,9 @@ all: $(EXECS)
 %.s: %.c
 	$(CC) $(CFLAGS) -S -c $<
 
-# Build example1 executable
+# Build executable
 $(EXECS): %: %.o %.s
-	$(CC) $(CFLAGS) -o $@ $< $(LFLAGS)
+	$(CC) -o $@ $< $(LFLAGS)
 
 # Clean directory: remove object files and executables
 .PHONY: clean cleanobj cleanasm
