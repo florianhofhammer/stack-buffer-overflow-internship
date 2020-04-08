@@ -15,7 +15,7 @@ Apart from that, no changes to the system were made.
 # Smashing the Stack for fun and profit - Aleph1
 
 As a starting exercise, I am trying to recreate the examples and exploits from the [original paper](http://phrack.org/issues/49/14.html#article).
-The compiler flags for `gcc` generally used are `-m32 -fno-stack-protector -z execstack -D_FORTIFY_SOURCE=0` (see e.g. the [Makefile](./Makefile.common)).
+The compiler flags for `gcc` generally used are `-m32 -fno-stack-protector -z execstack -D_FORTIFY_SOURCE=0` (see e.g. the [common Makefile](./Makefile.common) and the [directory specific Makefile](./Smashing%20the%20stack%20-%20Aleph1/Makefile)).
 Without those, current stack overflow mitigation measures do not allow to successfully overflow the buffers on the stack as described in the paper.
 
 ## example3.c
