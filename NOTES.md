@@ -1,6 +1,6 @@
 # Virtual Machine setup
 
-The virtual machine used for the experiments is based on Ubuntu 19.10 Desktop.
+The virtual machine used for the experiments is based on Ubuntu 19.10 Desktop, Linux kernel 5.3.
 Updates are regularly installed to keep the system up to date.   
 ASLR is permanently deactivated on the machine by issuing the command `echo "kernel.randomize_va_space = 0" | sudo tee /etc/sysctl.d/01-disable-aslr.conf`.
 
@@ -189,10 +189,47 @@ If the SUID bit is set on the executable and it is owned by root, we can spawn a
 ```
 This code additionally calls `setreuid(0, 0)` before spawning the shell.
 
-Note: when working through this exercise, I noticed that I could not just get the addresses from the executable but had to get the addresses from gdb.
+Note: when working through this exercise, I could not just get the addresses from the executable but had to get the addresses from gdb.
 This is because the executable by default is compiled as PIE (Position Independent Executable).
 The addresses in the executable (e.g. showed by `objdump -d vulnerable`) are only offsets from the base address. 
-The base address (`0x0000555555554000`) is always the same, because ASLR is disabled.   
-If compiled with the compiler flag `-no-pie`, the executable would contain the absolute addresses of the instructions instead of relative ones relative to the base address.
+The base address (`0x0000555555554000`) is always the same, because ASLR is disabled.
+When knowing this base address, one could just calculate all other addresses in the executable by adding the given offset to the base address.   
+If compiled with the compiler flag `-fno-pic` and the linker flag `-no-pie`, the executable would contain the absolute addresses of the instructions instead of relative ones relative to the base address.
 This would make it probably easier to find the addresses (in the code snippet above: addresses for the `ret` instruction, `pop rdi; ret` and `/bin/sh`) because it would be sufficient to just look at the executable without loading it into a debugger.
-However, it would still be necessary to get the address of the `system` function by loading it into a debugger, as libc is only dynamically loaded on runtime and the address thus cannot be determined without running the executable.
+However, it would probably still be necessary to get the address of the `system` function by loading it into a debugger, as libc is only dynamically loaded on runtime and the address thus can only be determined by either knowing the offset of `system` in libc and at which base address libc will be loaded or by loading the executable into gdb and just printing the address with `p system`.
+
+# ASLR Smack and Laugh
+
+The [ASLR Smack & Laugh Reference](ttps://api.semanticscholar.org/CorpusID:16401261) by Tilo Müller, published in 2008, describes several methods how to bypass protection by Address Space Layout Randomization built into the Linux kernel.   
+As he uses a Linux installation with kernel 2.6.23, glibc 2.6.1 and gcc 4.2.3, several of his described exploits might not work as described on modern machines.
+Additionally, his machine is a 32 bit machine which is why all the executables are compiled in 32 bit mode (see the [Makefile](./ASLR%20Smack%20and%20Laugh%20reference%20-%20Tilo%20Mueller/Makefile)).
+
+For these exploits, ASLR is of course activated in the Linux kernel (e.g. by issuing the command `echo 2 | sudo tee /proc/sys/kernel/randomize_va_space`).
+
+## General observations
+
+In section 2, Tilo Müller describes the functioning of ASLR.   
+On his machine, the heap address as well as the addresses of the `.text`, `.data` and `.bss` sections of the executable are not randomized.
+All of those addresses are randomized on a modern machine by default (see also the [section about the VM setup](#virtual-machine-setup)).
+This makes it harder to run the exploits the same way he does.
+It is not possible to have a fixed heap address without turning off ASLR in general.
+According to [the Linux kernel documentation](https://www.kernel.org/doc/html/latest/admin-guide/sysctl/kernel.html), setting the ASLR option to 1 should randomize the stack addresses but not the heap addresses.
+As the documentation hasn't been updated since kernel version 2.2 (as of 08/04/2020), this behavior seems to have changed for current kernel versions, as the heap base address is always randomized if the `randomize_va_space` kernel option is set to a value other than 0.   
+The latter sections of the executable however can be accessed without randomization: compiling with the `-fno-pic` compiler flag and linking with the `-no-pie` linker flag allows to have position dependent executables which have absolute addresses always loaded at the same base address.
+
+## Aggression
+
+### Brute force
+
+[bruteforce.c](./ASLR%20Smack%20and%20Laugh%20reference%20-%20Tilo%20Mueller/bruteforce.c) contains a buffer overflow vulnerability.
+With ASLR turned on, it is not possible to deterministically overflow this buffer and execute some shellcode, as the address of the buffer containing the shellcode changes with every run.   
+Thus, the shellcode is placed in a buffer with a big NOP sled in front of the shellcode.
+Here, the buffer is very big (4096 bytes) and it is thus easily possible to hit the NOP sled by brute forcing the overflow.
+If the buffer was smaller, we could also place the shellcode with the NOP sled in an environment variable and just overflow the buffer with addresses pointing to the environment variable, as it was done in previous sections.
+
+The [bfexploit](./ASLR%20Smack%20and%20Laugh%20reference%20-%20Tilo%20Mueller/bfexploit.c) executable prepares a buffer with the shellcode and an address to overflow the buffer in the vulnerable executable.
+The [bfexploit.sh](./ASLR%20Smack%20and%20Laugh%20reference%20-%20Tilo%20Mueller/bfexploit.sh) shell script then executes the vulnerable executable over and over again until the buffer is correctly overflowed and the overwritten return pointer points somewhere into the NOP sled in front of the shellcode.
+
+As given in the paper, the base address used for calculating pseudo-random addresses for overwriting the return pointer was `0xbf010101`.
+This address however would never work out, as the stack addresses on modern machines with randomized addresses start with `0xff`.
+Changing `0xbf010101` to `0xff010101` finally led to success after a certain amount of attempts.
