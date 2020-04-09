@@ -281,3 +281,21 @@ Conviniently, even the buffer's address stays the same when compiling the code (
 On modern systems, the heap addresses are randomized by ASLR as well.
 This makes it as hard to execute shellcode from the heap as from the stack.
 Therefore, the same strategies apply as for shellcode on the stack (e.g. [brute force attacks](#brute-force)).
+
+## Pointer redirecting
+
+### String pointers
+
+With hardcoded strings in the executable, it is pretty easy to find their addresses using `gdb` or `objdump`.
+If we can then create an executable (here: `echo "/bin/sh" > THIS && chmod 777 THIS && export PATH=.:$PATH`) that has the same name as the first word of one of the hardcoded strings, we can just overwrite the address of one string with the address of another and thus execute a different command than the vulnerable program's author intended to.
+
+### Function pointers
+
+The same as for [string pointers](#string-pointers) applies for function pointers.
+It is easy to find the addresses if such a vulnerability can be found.
+
+However, this kind of exploit is probably mightier than the string pointer exploit: with the latter, we can only control which new program to execute.
+With the former, we can call whatever function we like.
+Theoretically, it is thus possible to not only call a specific function (here: `system`) but also to create a gadget chain that builds up our shellcode.   
+This might be interesting in the context of the SUID bit being set: with a string pointer redirection, the program itself would already have to invoke `setuid` so that the sub-program we control has the elevated privileges.
+With a function pointer redirection and a ROP chain built up, we can execute whatever we want - e.g. the syscall for setuid and then spawn a shell with the elevated privileges we just obtained.

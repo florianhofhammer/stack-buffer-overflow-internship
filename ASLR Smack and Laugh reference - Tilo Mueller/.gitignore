@@ -4,6 +4,7 @@ bruteforce
 bfexploit
 formatStringDos
 ret2*
+*ptr
 !*.c
 
 # Prerequisites
