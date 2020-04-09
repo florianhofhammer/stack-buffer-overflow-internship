@@ -267,3 +267,17 @@ An important point to mention is that we still need an executable stack, even th
 This is because the .bss area in the executable (ELF) is marked as NOBITS (check e.g. with `readelf ./ret2bss -S`) which means that the address is fixed but the memory area is actually not part of the executable file itself but allocated when loading the program into memory based on the size of this section given in the file.
 Apparently, this allocated memory has the same permissions as the stack.
 Therefore, if the stack is not executable, data in the .bss section is also not executable.
+
+### ret2data
+
+This exploit works exactly the same way as [ret2bss](#ret2bss) does.
+The only difference is that the buffer now is initialized with data and can thus be found in the .data section of the ELF executable instead of the .bss section.
+Therefore, the memory used for that buffer actually is part of the executable and not freshly allocated on runtime as it was with the .bss area.
+
+Conviniently, even the buffer's address stays the same when compiling the code (compare e.g. `objdump -d -j .data -j .bss ./ret2data` and `objdump -d -j .data -j .bss ./ret2bss`) and thus the same [exploit](./ASLR%20Smack%20and%20Laugh%20reference%20-%20Tilo%20Mueller/ret2bssexploit.c) works for both executables.
+
+### ret2heap
+
+On modern systems, the heap addresses are randomized by ASLR as well.
+This makes it as hard to execute shellcode from the heap as from the stack.
+Therefore, the same strategies apply as for shellcode on the stack (e.g. [brute force attacks](#brute-force)).
