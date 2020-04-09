@@ -1,5 +1,9 @@
 # Executables
 getEBP
+bruteforce
+bfexploit
+formatStringDos
+ret2*
 !*.c
 
 # Prerequisites

@@ -231,5 +231,39 @@ The [bfexploit](./ASLR%20Smack%20and%20Laugh%20reference%20-%20Tilo%20Mueller/bf
 The [bfexploit.sh](./ASLR%20Smack%20and%20Laugh%20reference%20-%20Tilo%20Mueller/bfexploit.sh) shell script then executes the vulnerable executable over and over again until the buffer is correctly overflowed and the overwritten return pointer points somewhere into the NOP sled in front of the shellcode.
 
 As given in the paper, the base address used for calculating pseudo-random addresses for overwriting the return pointer was `0xbf010101`.
-This address however would never work out, as the stack addresses on modern machines with randomized addresses start with `0xff`.
+This address however would not work out, as the stack addresses on modern machines with randomized addresses start with `0xff`.
 Changing `0xbf010101` to `0xff010101` finally led to success after a certain amount of attempts.
+
+### Denial of service
+
+As we can see during the execution of a [brute force attack](#brute-force), the executable segfaults most of the time because we're overwriting the return address with an invalid value.
+
+The same applies for format string vulnerabilities: if looking at the [formatStringDos](./ASLR%20Smack%20and%20Laugh%20reference%20-%20Tilo%20Mueller/formatStringDos.c) executable, it is fully sufficient to give several `%s` parameters until the `printf` call tries to read from memory where it isn't allowed to read from and crashes.
+An even more reliable crash can be achieved by just giving `%n` parameters that try to write to memory, as the executable usually is allowed to write to even less memory than it is allowed to read from.
+
+## Return into non-randomized memory
+
+### ret2text
+
+The exploit in this case relies on the executable being loaded to the same address everytime, even if the stack addresses change.
+The exploit itself is pretty easy then:
+* Look up the address of the function we want to jump to (here: `secret`) via `gdb` or `objdump`
+* Calculate the string used for overwriting the buffer (here: 16 bytes padding (12 for the buffer, 4 for the frame pointer) + return address)
+* Execute the program (here: `./ret2text $(python -c "print('A' * 16 + '\xff\x91\x04\x08')")`)
+
+An interesting observation is that it is completely sufficient to call `./ret2text $(python -c "print('A' * 16")`.
+This doesn't actually overwrite the return address completely, in fact we're not even accessing the memory where the return address resides intentionally.
+As any string ends with a 0 byte and we have little endian representation, the input consisting of 16 A characters (or any 16 bytes except 0 bytes) overwrites the lowest byte of the return address unintentionally with 0.
+Coincidentally, the return address formerly pointing back into the `main` function points to the second byte of the `secret` function if the last byte of the address is set to 0.
+Thus, the `secret` function is still executed without even knowing the correct address in this case.
+
+### ret2bss
+
+The idea behind this exploit is the same as the one behind [ret2text](#ret2text): the .bss section of the executable always resides at the same static address and can thus easily be accessed, even when the stack addresses are randomized.   
+The advantage over ret2text is that we often can control what is written to the .bss area (see e.g. [ret2bss](./ASLR%20Smack%20and%20Laugh%20reference%20-%20Tilo%20Mueller/ret2bss.c)).
+Thus, we can write our shellcode to the buffer in the .bss memory area and then conveniently access it by overflowing a buffer on the stack so that the return address points to our global buffer in .bss.
+
+An important point to mention is that we still need an executable stack, even though we do not execute shellcode from the stack.
+This is because the .bss area in the executable (ELF) is marked as NOBITS (check e.g. with `readelf ./ret2bss -S`) which means that the address is fixed but the memory area is actually not part of the executable file itself but allocated when loading the program into memory based on the size of this section given in the file.
+Apparently, this allocated memory has the same permissions as the stack.
+Therefore, if the stack is not executable, data in the .bss section is also not executable.
