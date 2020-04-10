@@ -370,3 +370,37 @@ This behavior makes sense: we're executing shellcode in the daemon's context.
 However, in real life this is inconvenient as we cannot execute shell commands as a local attacker if the shell opens up remotely.
 Thus, compiling [divexploit.c](./ASLR%20Smack%20and%20Laugh%20reference%20-%20Tilo%20Mueller/divexploit.c) with shellcode spawning a reverse shell makes more sense (`sc = net_shellcode;` instead of `sc = shellcode;` in [line 14](./ASLR%20Smack%20and%20Laugh%20reference%20-%20Tilo%20Mueller/divexploit.c#L14)).
 Instead of spawning a shell in the terminal window `./divulge` is running in, a shell is bound to a port given in the shellcode (here: 4444) so that the shell can be conveniently accessed from remote (here: `nc localhost 4444`).
+
+## Stack juggling methods
+
+### ret2ret
+
+This approach aims to overwrite the last byte of a pointer on the stack with a null byte.
+Thus, the address becomes smaller if the last byte wasn't already `0x00` and therefore points to a position later in the stack frame or even in a newer stack frame.
+
+Such an overwrite is pretty easy: every string ends with a `0x00` byte.
+When we now overflow a buffer on a little endian machine by the right number of bytes, we don't overwrite the whole pointer but only it's last byte with a null byte.
+
+We thus want to overwrite a buffer as follows:
+* Put a NOP sled in the start of the buffer
+* Put shellcode after the NOP sled but before the return address
+* Overwrite the return address and all following stack values with the address of a `ret` instruction from the executable up until the pointer in question
+
+If we then execute the program, the following happens: the return address is overwritten with the address of a `ret` instruction which then returns to the next `ret` instruction and so on until we reach the pointer.
+If we're lucky, the pointer then points into our NOP sled because we overwrote the last byte and the program returns to the shellcode.
+If we're not lucky, the program just crashes.   
+However, as the addresses are randomized, we just need to try several times until we succeed (as long as the offset to the shellcode is small enough so that overwriting a single byte is sufficient).
+
+Therefore, calling `./ret2ret "$(./ret2retexploit)"` works most of the time but sometimes just yields a segmentation fault or encounters an illegal instruction.
+
+### ret2pop
+
+The ret2pop approach is very similar.
+The difference is that it doesn't try to modify a pointer to return to but to take an existing pointer to return to (e.g. a pointer to the program call's arguments).
+
+As we're looking for a perfect existing pointer, we don't want to overwrite its last byte.
+Thus, the return chain is shortened by one and the last instruction is not a simple `ret`, but a `pop; ret`.
+Therefore, the program enters the return chain as above and returns from one `ret` instruction to the next until it encounters a `pop` instruction, then pops the last value between our return chain and the perfect pointer and finally returns to the perfect pointer (pointing to the shellcode).   
+It doesn't matter which register the `pop` instruction pops into, it is just important that it removes one word from the stack.
+
+As we have a perfect pointer here, the call `./ret2pop "$(./ret2popexploit)"` always works even without a NOP sled because we're automatically pointing to the start of the shellcode without any address ambiguities.

