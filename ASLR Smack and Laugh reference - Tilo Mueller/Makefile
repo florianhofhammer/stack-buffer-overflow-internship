@@ -3,7 +3,7 @@ CFLAGS= -m32 -fno-stack-protector -fno-pic -D_FORTIFY_SOURCE=0 -mpreferred-stack
 LFLAGS= -m32 -no-pie -z execstack
 
 # Suppress warning for format string vulnerability
-formatStringDos: CFLAGS += -Wno-format-security
+formatStringDos divulge: CFLAGS += -Wno-format-security
 
 # Include the common Makefile
 include ../Makefile.common

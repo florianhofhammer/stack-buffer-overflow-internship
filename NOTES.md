@@ -299,3 +299,74 @@ With the former, we can call whatever function we like.
 Theoretically, it is thus possible to not only call a specific function (here: `system`) but also to create a gadget chain that builds up our shellcode.   
 This might be interesting in the context of the SUID bit being set: with a string pointer redirection, the program itself would already have to invoke `setuid` so that the sub-program we control has the elevated privileges.
 With a function pointer redirection and a ROP chain built up, we can execute whatever we want - e.g. the syscall for setuid and then spawn a shell with the elevated privileges we just obtained.
+
+## Integer overflows
+
+### Width overflow
+
+In the example in [width.c](./ASLR%20Smack%20and%20Laugh%20reference%20-%20Tilo%20Mueller/width.c), a `char` is used to hold the length of the string.
+The problem that arises is that the maximum positive value of a `char` is 127 and the buffer size is fixed to 64.
+If we know input a string longer than 127 bytes (e.g. 128 bytes), we achieve an overflow and we can control the value of the `char` holding the string length.
+If we input for example a string with a length of 128 bytes, `isize` holds the value -128 after measuring the string length because of the overflow and we can copy the input to the buffer and achieve a buffer overflow.
+
+For example with the command `./width $(python -c "print('A' * 88 + '\xf6\x91\x04\x08'  + 'A' * 36)")`, we jump to the secret function that is not used during normal execution.
+The first 88 bytes are used for padding until we reach the part of memory where the return address resides, the next four bytes overwrite the return address and the following 36 bytes are necessary to achieve a string length of 128 bytes and thus bypass the length check by overflowing the value of `isize`.
+
+Just like with other methods above, this method could be used for building a ROP chain or similar.
+This is only possible because we have fixed addresses for ELF sections like `.text`, `.data` or `.bss`.
+Other addresses like the stack or the base address of libc are randomized which is why they are hard to exploit.
+
+### Signedness bugs
+
+With this kind of bug we can overflow a buffer by giving a negative number.
+Copy functions (e.g. `memcpy`, `strncpy`, etc.) usually expect the size parameter to be an _unsigned_ integer.
+When we now provide a negative number (i.e. a _signed_ integer), it passes size checks, as it is smaller than the positive maximum size we check for.
+However, it is then interpreted as an unsigned number in the actual copy function which yields a huge number that reliably overflows the destination buffer.
+
+In the [example](./ASLR%20Smack%20and%20Laugh%20reference%20-%20Tilo%20Mueller/signedness.c) given for this kind of bug we cannot control the content of the overflown buffer and thus redirect execution.
+However, we can still achieve a Denial of Service attack and crash the executable.   
+The interesting part hereby is that this can be achieved no matter what the security measures are.
+If we're just aiming to crash the executable and such a bug is present, no stack protectors/canaries, ASLR mechanisms or other protection mechanisms can prevent us from successfully crashing the executable.
+
+## Stack divulging methods
+
+### Stack stethoscope
+
+With the help of the `/proc/PID/stat` file (where PID is the process id of the process we want to attack), we can find out the base stack address of a process.
+If we then also know the address of the buffer to overflow (e.g. found with gdb), we can calculate the offset of this buffer on the stack.
+With this offset, we can always calculate the correct address of the buffer where we put our shellcode.
+
+The only problem is that we always need the base stack address which changes from run to run.
+Thus, this attack is only feasible on programs that already run for a longer time when they expect us to provide input (i.e. not feasible for buffer overflows based on program call arguments), for example network daemons.
+As the `/proc/PID/stat` file is readable by anybody, we don't even need special privileges, no matter what privileges the program to attack runs with.
+
+An example can be found with the [divulge](./ASLR%20Smack%20and%20Laugh%20reference%20-%20Tilo%20Mueller/divulge.c) daemon: it expects input over the network and prints the same input back (more or less like a call to `cat` over the network).
+There is a buffer overflow vulnerability in [line 12](./ASLR%20Smack%20and%20Laugh%20reference%20-%20Tilo%20Mueller/divulge.c#L12) which copies the input into a buffer without checking for the size of the input.
+Thus, we can overwrite the return address with the address of the buffer itself that we calculated with the help of the stack base address and the offset and execute shellcode we put in the buffer.   
+Weirdly, this exploit did not work with the SUID bit set on the daemon but only produced a segmentation fault.
+The same input without the SUID bit set works and spawns a shell.
+This issue should be investigated further.
+
+### Formatted information
+
+In the [stack stethoscope](#stack-stethoscope) section access to the machine was necessary to always get the base of the stack by reading the corresponding `/proc/PID/stat` file.
+We now want to execute an exploit from remote, i.e. without accessing this file.
+
+The approach for such an exploit is the following:
+* Exploit the format string vulnerability: return an address from the stack
+* Get the offset of this address from the stack base address by looking into `/proc/PID/stat` once and calculating the offset   
+  This can also be done locally as we're not looking for an address but only for an offset.
+* Send two requests:
+    1. Get the address on the stack with the help of the format string vulnerability
+    2. Execute the stack buffer overflow
+* Between the two requests: calculate address used for stack buffer overflow in the same manner as for the stack stethoscope
+
+We thus make use of both vulnerabilities: a format string vulnerability and a stack buffer overflow vulnerability.
+The actual exploit can then be conducted with the [remote_format.sh](./ASLR%20Smack%20and%20Laugh%20reference%20-%20Tilo%20Mueller/remote_format.sh) bash script.
+It already contains the necessary offset to calculate the stack base address.
+
+If executing `./divulge` in one terminal window and `./remote_format.sh` in another, we can observe that a shell spawns in the terminal window of `./divulge`.
+This behavior makes sense: we're executing shellcode in the daemon's context.
+However, in real life this is inconvenient as we cannot execute shell commands as a local attacker if the shell opens up remotely.
+Thus, compiling [divexploit.c](./ASLR%20Smack%20and%20Laugh%20reference%20-%20Tilo%20Mueller/divexploit.c) with shellcode spawning a reverse shell makes more sense (`sc = net_shellcode;` instead of `sc = shellcode;` in [line 14](./ASLR%20Smack%20and%20Laugh%20reference%20-%20Tilo%20Mueller/divexploit.c#L14)).
+Instead of spawning a shell in the terminal window `./divulge` is running in, a shell is bound to a port given in the shellcode (here: 4444) so that the shell can be conveniently accessed from remote (here: `nc localhost 4444`).

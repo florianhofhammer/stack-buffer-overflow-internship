@@ -5,6 +5,9 @@ bfexploit
 formatStringDos
 ret2*
 *ptr
+width
+signedness
+div*
 !*.c
 
 # Prerequisites
