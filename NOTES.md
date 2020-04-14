@@ -456,3 +456,27 @@ The steps to this exploit are combined into the [ret2gotexploit.sh](./ASLR%20Sma
 
 Similar to the function pointer redirection exploit, we could theoretically overwrite `printf`'s GOT entry with whatever address we want.
 We could thus not only replace the function that is called but also create a ROP chain to which we point.
+
+## Off by one
+
+The off-by-one vulnerability is a vulnerability that allows just overflowing the buffer by a single byte.
+This doesn't sound like much but in some cases, this single byte might already be enough.
+
+Because of little endian representation, such an overflow can at most affect the least significant byte of the saved frame pointer which can be found between the return address and the variables on the stack.
+In the function prologue, this pointer is popped into `ebp` which in the next function prologue is moved into `esp`.
+Thus, we cannot directly control the program flow when returning from the vulnerable function but only when the program returns from the next function that called the vulnerable function.
+
+The overwritten byte usually gets turned into a `0x00` byte, as such a vulnerability most of the time occurs when copying a string and strings end with a `0x00` byte.
+Thus, we can lower the saved frame pointer and by some luck it might point back into the buffer that was used for the overflow.   
+The strategy is then as follows:
+1. Fill the buffer with a `ret` chain that ends in a `jmp esp` instruction (similar to the [ret2esp](#ret2esp) exploit)
+2. Place the shellcode after the address of such a `jmp esp` instruction (possibly padded with NOPs to achieve the correct buffer size and stack alignment)
+
+When passing such a buffer to a vulnerable function, `ebp` possibly (not necessarily because of ASLR, several attempts might be necessary) points into our buffer after the function prologue.
+Upon the next function return, `esp` points into the `ret` chain in the buffer.
+Thus, when returning from the function, the `ret` chain from the buffer is executed and `esp` is increased up to the address of `jmp esp`.
+Then, this instruction is executed and as `esp` now points to the shellcode in the buffer, the shellcode is executed.
+
+All in all, this exploit is a combination of previous techniques: firstly, it is similar to the [ret2ret](#ret2ret) exploit which also depends on overwriting the last byte of a pointer.
+However, in that case, the pointer is not a saved frame pointer but a pointer residing in the program space.
+Secondly, it makes use of techniques from the [ret2esp](#ret2esp) exploit to place shellcode on the stack and reliably jump to that shellcode.
