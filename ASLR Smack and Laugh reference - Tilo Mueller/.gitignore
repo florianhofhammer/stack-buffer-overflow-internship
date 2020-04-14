@@ -9,6 +9,7 @@ width
 signedness
 div*
 !*.c
+!*.sh
 
 # Prerequisites
 *.d

@@ -2,7 +2,13 @@
 
 The virtual machine used for the experiments is based on Ubuntu 19.10 Desktop, Linux kernel 5.3.
 Updates are regularly installed to keep the system up to date.   
-ASLR is permanently deactivated on the machine by issuing the command `echo "kernel.randomize_va_space = 0" | sudo tee /etc/sysctl.d/01-disable-aslr.conf`.
+ASLR is permanently deactivated on the machine by issuing the command `echo "kernel.randomize_va_space = 0" | sudo tee /etc/sysctl.d/01-disable-aslr.conf`.   
+Support for compiling 32 bit executables was added by running
+```bash
+    sudo dpkg --add-architecture i386 # 32 bit packages
+    sudo apt-get update
+    sudo apt-get install libc6:i386 libncurses5:i386 libstdc++6:i386 g++-multilib build-essential gdb # install 32 bit libraries and development tools
+```
 
 As the GDB version 8.3 included in the default Ubuntu repositories kept crashing, I installed GDB 9.1 from the source provided on the [official website](https://www.gnu.org/software/gdb/).
 Additionally, I installed `peda`, `pwndbg` and `gef` for easier debugging using an install script from a [GitHub repository](https://github.com/apogiatzis/gdb-peda-pwndbg-gef).   
@@ -204,7 +210,7 @@ The [ASLR Smack & Laugh Reference](ttps://api.semanticscholar.org/CorpusID:16401
 As he uses a Linux installation with kernel 2.6.23, glibc 2.6.1 and gcc 4.2.3, several of his described exploits might not work as described on modern machines.
 Additionally, his machine is a 32 bit machine which is why all the executables are compiled in 32 bit mode (see the [Makefile](./ASLR%20Smack%20and%20Laugh%20reference%20-%20Tilo%20Mueller/Makefile)).
 
-For these exploits, ASLR is of course activated in the Linux kernel (e.g. by issuing the command `echo 2 | sudo tee /proc/sys/kernel/randomize_va_space`).
+__For these exploits, ASLR is of course activated in the Linux kernel__ (e.g. by issuing the command `echo 2 | sudo tee /proc/sys/kernel/randomize_va_space`).
 
 ## General observations
 
@@ -294,6 +300,11 @@ If we can then create an executable (here: `echo "/bin/sh" > THIS && chmod 777 T
 The same as for [string pointers](#string-pointers) applies for function pointers.
 It is easy to find the addresses if such a vulnerability can be found.
 
+In the given example, we can overwrite the function pointer with the address of `system`'s PLT entry.
+Thus, `system` is executed instead of the actual function.
+With the command `./funcptr "$(python -c "print('A' * 64 + '\xa0\x90\x04\x08')")" /bin/sh`, we can spawn a shell.
+The first argument overwrites the pointer, the second argument contains the command to execute.
+
 However, this kind of exploit is probably mightier than the string pointer exploit: with the latter, we can only control which new program to execute.
 With the former, we can call whatever function we like.
 Theoretically, it is thus possible to not only call a specific function (here: `system`) but also to create a gadget chain that builds up our shellcode.   
@@ -362,10 +373,10 @@ The approach for such an exploit is the following:
 * Between the two requests: calculate address used for stack buffer overflow in the same manner as for the stack stethoscope
 
 We thus make use of both vulnerabilities: a format string vulnerability and a stack buffer overflow vulnerability.
-The actual exploit can then be conducted with the [remote_format.sh](./ASLR%20Smack%20and%20Laugh%20reference%20-%20Tilo%20Mueller/remote_format.sh) bash script.
+The actual exploit can then be conducted with the [divexploit_remote.sh](./ASLR%20Smack%20and%20Laugh%20reference%20-%20Tilo%20Mueller/divexploit_remote.sh) bash script.
 It already contains the necessary offset to calculate the stack base address.
 
-If executing `./divulge` in one terminal window and `./remote_format.sh` in another, we can observe that a shell spawns in the terminal window of `./divulge`.
+If executing `./divulge` in one terminal window and `./divexploit_remote.sh` in another, we can observe that a shell spawns in the terminal window of `./divulge`.
 This behavior makes sense: we're executing shellcode in the daemon's context.
 However, in real life this is inconvenient as we cannot execute shell commands as a local attacker if the shell opens up remotely.
 Thus, compiling [divexploit.c](./ASLR%20Smack%20and%20Laugh%20reference%20-%20Tilo%20Mueller/divexploit.c) with shellcode spawning a reverse shell makes more sense (`sc = net_shellcode;` instead of `sc = shellcode;` in [line 14](./ASLR%20Smack%20and%20Laugh%20reference%20-%20Tilo%20Mueller/divexploit.c#L14)).
@@ -426,3 +437,22 @@ This approach is based on the return behavior of functions: even if we don't sav
 In our examplary code in [ret2eax.c](./ASLR%20Smack%20and%20Laugh%20reference%20-%20Tilo%20Mueller/ret2eax.c), we don't save the return value of `strcpy`, which is a pointer to the destination buffer (i.e. the buffer that contains our shellcode).
 As the function `function` returns immediately after the call to `strcpy`, `eax` is not overwritten with another value and thus still contains the address of the buffer when returning.    
 By overwriting the return address with the correct value, we can then return to the instruction `call *%eax` which lets the program continue execution directly at our shellcode.
+
+## GOT hijacking - ret2got
+
+The ret2got exploit is pretty similar to the [function pointer redirection](#function-pointers) exploit.
+During the latter exploit, we overwrite a function pointer with the address of the PLT entry of the `system` function.
+The function pointer we're overwriting is located in the same function and thus also on the stack.
+
+During the ret2got exploit, we're also overwriting a function pointer: the GOT entry of `printf`.
+We overwrite a pointer to an array with the address of `printf`'s GOT entry and then overwrite this entry with the address of `system`'s PLT entry.
+The next call to `printf` then executes `system` instead with the arguments passed to `printf`.
+
+As we can only partially control the arguments of `printf`, it is necessary to set up an environment similar to the one from the [string pointer redirection exploit](#string-pointers), where we cannot control the input to `system` but where we provide an executable shell script whos name matches the first word of the `system` argument.
+This script can be created by the command `echo /bin/sh > Array && chmod 777 Array && export PATH=.:$PATH`.
+Calling then `./ret2got "$(python -c "print('A' * 8 + '\x0c\xc0\x04\x08')")" "$(python -c "print('\xa0\x90\x04\x08')")"` yields the described exploit.
+
+The steps to this exploit are combined into the [ret2gotexploit.sh](./ASLR%20Smack%20and%20Laugh%20reference%20-%20Tilo%20Mueller/ret2gotexploit.sh) shell script.
+
+Similar to the function pointer redirection exploit, we could theoretically overwrite `printf`'s GOT entry with whatever address we want.
+We could thus not only replace the function that is called but also create a ROP chain to which we point.
