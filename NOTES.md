@@ -480,3 +480,37 @@ Then, this instruction is executed and as `esp` now points to the shellcode in t
 All in all, this exploit is a combination of previous techniques: firstly, it is similar to the [ret2ret](#ret2ret) exploit which also depends on overwriting the last byte of a pointer.
 However, in that case, the pointer is not a saved frame pointer but a pointer residing in the program space.
 Secondly, it makes use of techniques from the [ret2esp](#ret2esp) exploit to place shellcode on the stack and reliably jump to that shellcode.
+
+## Overwriting .dtors
+
+This exploit aims to overwrite the `.dtors` containing pointers to destructor functions which are run after the `main` function returns with the help of a format string vulnerability.
+The overwritten pointers should then point to an array on the heap containing shellcode to execute.
+It is thus more or less a ret2heap exploit with the difference that not the return address is overwritten with a pointer to the heap by a simple stack buffer overflow but a destructor function pointer by a string format vulnerability.
+
+There are several reasons why this exploit does not work exactly like that:
+1. A `.dtors` section does not exist in executables created by modern compilers/linkers.
+   There is a pretty much equivalent section, `.fini_array` which also contains pointers to functions which should be run after `main` returns.
+   However, the structure is a little bit different, as `.dtors` has start and end markers (0xffffffff and 0x00000000, respectively) which `.fini_array` does not have.
+2. With modern ASLR, heap addresses are also completely randomized and we cannot use the heap to store the shellcode.
+   A solution to that issue is storing the shellcode in a global array (which is located in the non-randomized `.bss` section of the ELF executable) instead.
+   Thus, the exploit becomes a ret2bss exploit instead of ret2heap.
+   It works exactly the same way, only the location of the shellcode is different.
+3. In the paper by Tilo Müller, he puts the `.dtors` address at the start of the vulnerable string and refers to that address by the eighth format string placeholder.
+   He thus has seven format string placeholders in front helping him to control the number to write to the address with the `%n` format string placeholder (e.g. by controlling the length of the output by `%.mx` where `m` is the length to output).
+   Because of different behaviour with modern compilers, this is not the case anymore: when putting the address in the front of the string, the first format string placeholder automatically accesses this address.
+   Thus, we can only control the number to write via `%n` by padding the string with junk between the address and the `%n` placeholder.
+   This is a problem because the command line (here: bash 5.0.3) only accepts string of a certain length as parameter to a function.
+   Because hex addresses transformed into decimal numbers are huge and our padding thus has to be extremely long, we cannot directly write the address we want with the help of `%n`.    
+   When looking at the data in `.fini_array`, we see that the pointer located there points to an address starting with 0x0804.
+   The address located there thus is in the address space of our ELF executable.
+   It is thus sufficient to overwrite only the lower two bytes of this pointer with the lower two bytes of the address of our array in the `.bss` section.
+   This can be achieved by using `%hn` instead of `%n` as format string placeholder.
+4. The `.fini_array` section is subject of RELRO (relocation read-only).
+   Even though it is marked writable in the output of `readelf -S ret2dtors`, it is marked as read-only by the dynamic linker on program start.
+   Thus, we only get a segmentation fault when trying to overwrite a pointer in this section like described above.   
+   The solution is to disable RELRO by passing the additional linker flag `-z norelro` when linking the executable.
+
+In conclusion, an exploit is possible (command `./ret2dtors "$(./shellcode)" "$(python -c "print('\x68\xb1\x04\x08' + 'A' * 45724 + '%hn')")"` where `shellcode` is a helper executable just outputting shellcode (see [shellcode.c](./ASLR%20Smack%20and%20Laugh%20reference%20-%20Tilo%20Mueller/shellcode.c))) but only with severe changes.   
+Firstly, it is not possible to use the heap.
+We have to rely on an array in the `.bss` or `.data` section (c.f. [ret2bss](#ret2bss) and [ret2data](#ret2data)), i.e. a global array.   
+Secondly, we have to link the executable with RELRO disabled.
