@@ -1,6 +1,6 @@
 # Virtual Machine setup
 
-The virtual machine used for the experiments is based on Ubuntu 19.10 Desktop, Linux kernel 5.3.
+The virtual machine used for the experiments is based on the Ubuntu 19.10 Desktop distribution with Linux kernel 5.3.0 and GLIBC 2.30.
 Updates are regularly installed to keep the system up to date.   
 ASLR is permanently deactivated on the machine by issuing the command `echo "kernel.randomize_va_space = 0" | sudo tee /etc/sysctl.d/01-disable-aslr.conf`.   
 Support for compiling 32 bit executables was added by running
@@ -195,14 +195,58 @@ If the SUID bit is set on the executable and it is owned by root, we can spawn a
 ```
 This code additionally calls `setreuid(0, 0)` before spawning the shell.
 
-Note: when working through this exercise, I could not just get the addresses from the executable but had to get the addresses from gdb.
+Note: when working through this exercise, I could not just get the addresses from the executable but had to get the addresses from GDB.
 This is because the executable by default is compiled as PIE (Position Independent Executable).
 The addresses in the executable (e.g. showed by `objdump -d vulnerable`) are only offsets from the base address. 
 The base address (`0x0000555555554000`) is always the same, because ASLR is disabled.
 When knowing this base address, one could just calculate all other addresses in the executable by adding the given offset to the base address.   
 If compiled with the compiler flag `-fno-pic` and the linker flag `-no-pie`, the executable would contain the absolute addresses of the instructions instead of relative ones relative to the base address.
 This would make it probably easier to find the addresses (in the code snippet above: addresses for the `ret` instruction, `pop rdi; ret` and `/bin/sh`) because it would be sufficient to just look at the executable without loading it into a debugger.
-However, it would probably still be necessary to get the address of the `system` function by loading it into a debugger, as libc is only dynamically loaded on runtime and the address thus can only be determined by either knowing the offset of `system` in libc and at which base address libc will be loaded or by loading the executable into gdb and just printing the address with `p system`.
+However, it would probably still be necessary to get the address of the `system` function by loading it into a debugger, as libc is only dynamically loaded on runtime and the address thus can only be determined by either knowing the offset of `system` in libc and at which base address libc will be loaded or by loading the executable into GDB and just printing the address with `p system`.
+
+## Part 3
+
+For the [third part](https://blog.techorganic.com/2016/03/18/64-bit-linux-stack-smashing-tutorial-part-3/) of the 64 bit stack smashing tutorial, ASLR is enabled (e.g. by the command `echo 2 | sudo tee /proc/sys/kernel/randomize_va_space`).
+Additionally, the Linux kernel by default disables `ptrace` functionality for security reasons.
+With this restriction, it is not possible to attach the debugger to an already running process.
+Thus, it is necessary to enable ptracing by issuing the command `echo 0 | sudo tee /proc/sys/kernel/yama/ptrace_scope`.
+
+The exploit is based on the executable being available over the network (`socat TCP-LISTEN:2323,reuseaddr,fork EXEC:./vulnerable_advanced`) because we can then easily issue the distinct stages of the exploit.
+The exploit then consists of the following steps:
+1. Leak `memset` address from the Global Offset Table (GOT)
+2. Calculate the libc base address by the `memset` address and the known (fixed) offset of `memset` in libc
+3. Calculate the address of `system` by the libc base address and the known (fixed) offset of `system` in libc
+4. Overwrite the GOT entry of `memset` with the address of `system` => any further `memset` calls call `system` instead
+5. Read the "/bin/sh" string into memory (as an argument to `system`)
+6. Call `memset` again which in fact calls `system`
+
+The following difficulties occured during those steps and the development of that exploit:
+1. It is not possible to set a breakpoint in the vulnerable executable and attach GDB to the running process, as `socat` only executes the vulnerable executable on a new connection and the memory the breakpoint refers to thus is not loaded yet.
+   This behavior leads to an error in GDB because it cannot access the memory at the specified location.    
+   This problem can be solved by setting a breakpoint, disabling the breakpoint, setting a catchpoint on execution of a new executable and continuing.
+   GDB then automatically breaks when `socat` spawns the vulnerable executable.
+   Then, it is sufficient to enable the breakpoint again and continue, as the corresponding address is now located in memory.
+   The first automatic steps (until breaking at the catchpoint) can be achieved by the command `gdb-pwndbg -ex "b BREAK" -ex "dis" -ex "catch exec" -ex "c" -q -p $(pidof socat)`, where BREAK is the breakpoint (no matter whether using `gdb`, `gdb-pwndbg`, etc.).
+2. The offset for `memset` in libc cannot be determined as it is the case in the tutorial.
+   If the offset is determined like that, we only have the offset to the generic `memset` function.
+   However, on modern Linux systems, the GNU IFUNC functionality dispatches dynamically to specialized functions depending on CPU features.
+   On the current machine (VM as specified in [Virtual Machine setup](#virtual-machine-setup) running on an Intel Core i5-6300HQ), the GOT entry of `memset` thus does not point to the generic `memset` in libc, but to `__memset_avx2_unaligned` in libc which makes use of the AVX2 instructions in modern Intel Core or AMD CPUs.
+   Such ifuncs are not displayed when reading the symbols from libc and we thus cannot determine the offset easily just by calling `readelf -s /lib/x86_64-linux-gnu/libc.so.6 | grep memset`.
+   Fortunately, there exists a [git repository](https://github.com/ZetaTwo/ifunc-dumper) which provides the code to build the `ifunc-resolver` utility to get the offsets in libc of such specialized functions.   
+   With this offset, it is finally possible to determine the correct libc base address and thus the correct address of the `system` function.
+3. Even with those issues resolved, we can observe in GDB that the exploit succeeds in that it calls `system` correctly.
+   However, it does not spawn a shell and returns immediately.   
+   The error is not easy to find, as we're jumping to `system` instead of calling it and GDB thus does not show the arguments.
+   Also, stepping through the `system` call in GDB stops at a call to `posix_spawn` with the aforementioned error.
+   The parameters to that call don't reveal anything about the argument to the `system` call, which makes it difficult to spot the error.   
+   The solution is as follows: the address provided in the tutorial to write the "/bin/sh" string to is not writable in the environment used for creating the exploit.
+   However, the `read` call reading from `stdin` and writing to that address does neither crash nor yield an error.
+   With that behavior, we're actually not calling `system("/bin/sh")` but `system(whatever is located at the non-writable address)`.
+   Therefore, the `system` call fails, as it tries to execute whatever is located at that address as a shell command.
+   By changing the presumably writable address to an actually writable address (here: location in the `.bss` section of the ELF executable), the exploit finally succeeds, as it can write the "/bin/sh" string to that location and pass it as an argument to `system`.
+
+The final exploit code crafted from the addresses found in the executable (compiled/linked as non-PIE) and the aforementioned approaches to find offsets and addresses is located in the [poc.py](./64bit%20Stack%20smashing%20-%20superkojiman/poc.py) Python script.
+It relies on the executable being available over the network as mentioned above.
 
 # ASLR Smack and Laugh
 
@@ -344,7 +388,7 @@ If we're just aiming to crash the executable and such a bug is present, no stack
 ### Stack stethoscope
 
 With the help of the `/proc/PID/stat` file (where PID is the process id of the process we want to attack), we can find out the base stack address of a process.
-If we then also know the address of the buffer to overflow (e.g. found with gdb), we can calculate the offset of this buffer on the stack.
+If we then also know the address of the buffer to overflow (e.g. found with GDB), we can calculate the offset of this buffer on the stack.
 With this offset, we can always calculate the correct address of the buffer where we put our shellcode.
 
 The only problem is that we always need the base stack address which changes from run to run.

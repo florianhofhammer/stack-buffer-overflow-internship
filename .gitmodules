@@ -1,0 +1,3 @@
+[submodule "64bit Stack smashing - superkojiman/ifunc-dumper"]
+	path = 64bit Stack smashing - superkojiman/ifunc-dumper
+	url = https://github.com/ZetaTwo/ifunc-dumper.git

@@ -1,6 +1,6 @@
 # Executables
 getenvaddress
-vulnerable
+vulnerable*
 leak
 !*.c
 
