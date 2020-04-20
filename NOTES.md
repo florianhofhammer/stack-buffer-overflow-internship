@@ -10,6 +10,12 @@ Support for compiling 32 bit executables was added by running
     sudo apt-get install libc6:i386 libncurses5:i386 libstdc++6:i386 g++-multilib build-essential gdb # install 32 bit libraries and development tools
 ```
 
+The machine the VM runs on is based on an Intel Core i5 6300HQ processor.
+This processor does not support Intel CET (Control-flow Enforcement Technology).
+This processor feature might lead to failures when running the described exploits on more modern Intel processors.
+In order to disable this feature in the executables, add the `-fcf-protection=none` compiler flag.   
+As the compiler output differs depending on this flag being present or not, adaptations of addresses used for the exploits might be necessary.
+
 As the GDB version 8.3 included in the default Ubuntu repositories kept crashing, I installed GDB 9.1 from the source provided on the [official website](https://www.gnu.org/software/gdb/).
 Additionally, I installed `peda`, `pwndbg` and `gef` for easier debugging using an install script from a [GitHub repository](https://github.com/apogiatzis/gdb-peda-pwndbg-gef).   
 I also mounted the directory containing the internship data and files into the virtual machine and installed the OpenSSH Server to be able to `ssh` into the virtual machine and execute all the code whilst not having to make any changes to the host machine.
