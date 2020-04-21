@@ -17,7 +17,7 @@ In order to disable this feature in the executables, add the `-fcf-protection=no
 As the compiler output differs depending on this flag being present or not, adaptations of addresses used for the exploits might be necessary.
 
 As the GDB version 8.3 included in the default Ubuntu repositories kept crashing, I installed GDB 9.1 from the source provided on the [official website](https://www.gnu.org/software/gdb/).
-Additionally, I installed `peda`, `pwndbg` and `gef` for easier debugging using an install script from a [GitHub repository](https://github.com/apogiatzis/gdb-peda-pwndbg-gef).   
+Additionally, I installed `peda`, `pwndbg` and `gef` for easier debugging using an install script from a [GitHub repository](https://github.com/apogiatzis/gdb-peda-pwndbg-gef) as well as Python `pwntools` (version 4.0.1) via `pip install pwntools` for easier exploit creation.   
 I also mounted the directory containing the internship data and files into the virtual machine and installed the OpenSSH Server to be able to `ssh` into the virtual machine and execute all the code whilst not having to make any changes to the host machine.
 It is, however, important to point out that if accessing a shell via `ssh` in the VM, the stack addresses may differ from those when directly opening a terminal in the VM.
 In addition, the `ssh` session adds additional information to the environment by setting environment variables which might lead to different offsets on the stack.
@@ -253,6 +253,11 @@ The following difficulties occured during those steps and the development of tha
 
 The final exploit code crafted from the addresses found in the executable (compiled/linked as non-PIE) and the aforementioned approaches to find offsets and addresses is located in the [poc.py](./64bit%20Stack%20smashing%20-%20superkojiman/poc.py) Python script.
 It relies on the executable being available over the network as mentioned above.
+
+However, it is also possible to launch such an exploit locally.
+This was conducted using the Python `pwntools`.
+The [poc_local.py](./64bit%20Stack%20smashing%20-%20superkojiman/poc_local.py) contains the code for this exploit.
+In addition to the original exploit, this variant also calls `setreuid` in order to achieve privilege escalation when a vulnerable executable with the SUID bit set is exploited.
 
 # ASLR Smack and Laugh
 
