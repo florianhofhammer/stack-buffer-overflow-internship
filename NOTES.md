@@ -569,3 +569,43 @@ In conclusion, an exploit is possible (command `./ret2dtors "$(./shellcode)" "$(
 Firstly, it is not possible to use the heap.
 We have to rely on an array in the `.bss` or `.data` section (c.f. [ret2bss](#ret2bss) and [ret2data](#ret2data)), i.e. a global array.   
 Secondly, we have to link the executable with RELRO disabled.
+
+# Stack canary bypassing
+
+In the previous sections, I have described how to bypass ASLR, non-executable stack, etc. based on several tutorials.
+This section now aims to bypass stack protection by stack canaries and analyzes how stack canaries are used.
+
+## Stack analysis - `getCanary` and `getCanaryThreaded`
+
+The `getCanary` and `getCanaryThreaded` executables were created to output parts of the stack to `stdout` in order to analyze them.
+In order to have a stack structure as realistic as possible, ASLR is enabled and no stack protection mechanisms enabled by default in GCC were disabled.
+
+The [getCanary](./Stack%20canary%20bypassing/getCanary.c) executable forks in the `main` function and then outputs stack contents from both processes.   
+The interesting point to observe here is that the addresses (be it stack addresses or return addresses on the stack) are the same for both processes.
+This makes sense, as the child process forked from the parent process gets an exact copy of the parent process' virtual memory.
+In addition, the stack canary is also the same.
+This is because of the same reason: the virtual memory is an exact copy.
+However, the function of which we output the stack canary is called after forking so that it could theoretically be possible to instantiate new stack canaries for a new process.   
+The combination of the addresses and the stack canaries staying the same can be dangerous: assume we have a vulnerable daemon (e.g. reachable over the network) that forks on every call to it.
+An attacker can then make as many calls as he wishes to the daemon and has the same memory layout as well as the same stack canary on every call.
+Thus, he can gather all the information he needs in order to craft an exploit for the vulnerability.   
+Additionally, the stack canary is the same for every function.
+This allows an attacker to gather information about the stack canary through one vulnerable function of an executable and apply the gathered information in an exploit targeting a completely different function of the same executable.
+
+The [getCanaryThreaded](./Stack%20canary%20bypassing/getCanaryThreaded.c) executable creates two threads which output stack contents from both threads to `stdout`.
+The difference to the `fork` approach from above is that we're only creating threads here and no distinct processes.
+The threads live in the same address space as the process creating the threads and don't get assigned their own process ID.
+Of course they still have to work on their own stack in order to not clash with each others memory.
+For that reason, the memory addresses now differ and we achieve kind of an address randomization for the threads.
+However, this statement has a severe restriction: the memory offset for the threads is constant (here: `0x801000`).
+Thus, one can calculate the stack addresses of other threads by adding or subtracting this constant offset to or from a leaked stack address of the current thread.   
+For the stack canaries, the same holds true as above.
+The stack canaries are the same for any thread of the currently running process.
+Thus, an attacker can again query a vulnerable daemon that creates new threads upon calls to it as often as he wishes to obtain information about the stack canary.   
+An interesting observation here is that overwriting the stack canary of a thread does not cause an error.
+However, there is no saved frame pointer or even return address directly after the stack canary on the thread's stack so that we can reroute the control flow of the process.
+Nevertheless, we can gather information about the stack canary from the threads and apply that knowledge elsewhere in the same process without having to fear a change of the stack canary.
+
+An observation common to both executables is that the first byte of the stack canary (in the output: the last byte because of little endian representation) is always a `0x00` byte.
+This fact probably on the one hand aims to prevent string based functions (e.g. `printf`, `strcpy`, etc.) from reading the stack cookie, as the null byte marks the end of a string and functions like that thus don't continue after such a byte is encountered.
+On the other hand, this means that an attacker would have to include a null byte in his payload if he wants to overwrite the stack canary with the correct value. Again, string based functions stop when reaching a null byte so that an attacker can't use such functions to overwrite the other bytes of the canary.
