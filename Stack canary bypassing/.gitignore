@@ -1,5 +1,6 @@
 # Executables
 getCanary*
+echoserver
 !*.c
 
 # Prerequisites

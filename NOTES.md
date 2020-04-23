@@ -609,3 +609,27 @@ Nevertheless, we can gather information about the stack canary from the threads 
 An observation common to both executables is that the first byte of the stack canary (in the output: the last byte because of little endian representation) is always a `0x00` byte.
 This fact probably on the one hand aims to prevent string based functions (e.g. `printf`, `strcpy`, etc.) from reading the stack cookie, as the null byte marks the end of a string and functions like that thus don't continue after such a byte is encountered.
 On the other hand, this means that an attacker would have to include a null byte in his payload if he wants to overwrite the stack canary with the correct value. Again, string based functions stop when reaching a null byte so that an attacker can't use such functions to overwrite the other bytes of the canary.
+
+## Brute force leaking
+
+The [echoserver](./Stack%20canary%20bypassing/echoserver.c) executable was crafted to specifically contain a buffer overflow vulnerability.
+It was compiled using the default compiler and linker flags of GCC and thus has stack canaries enabled.
+The general behavior is as follows:
+The main process (i.e. the manually started `echoserver` process) listens for incoming connections.
+On new connections, it forks and lets the newly created child process handle the connection while the parent process itself just continues waiting for new connections.   
+The child process in the meantime reads into a buffer.
+However, the maximum number of bytes to read from the input stream is bigger than the buffer which is why we can achieve a buffer overflow.
+When we overwrite the stack canary, the process exits with an error message stating that "stack smashing [has been] detected".
+Thus, it is easy to leak the canary: whenever we guess right, the process exits normally.
+Whenever we guess incorrectly, the process yields an error message.
+
+The approach to leak the stack canary is then to overwrite the canary byte by byte until for each byte we don't receive an error message and the process exits normally.
+This is possible because of the [previously](#stack-analysis---`getCanary`-and-`getCanaryThreaded`) observed behavior that the stack canary doesn't change on forking, as the child process' memory is an exact copy of the parent process' memory.
+This includes the stack including the stack canaries as well.
+
+This is exactly what is done in the [leak_canary.py](./Stack%20canary%20bypassing/leak_canary.py) Python script: it connects to the vulnerable server over and over again and with each request tries to overwrite a byte of the stack canary.
+If it succeeds (i.e. no error message is returned), the current byte is saved and the next canary byte is evaluated.
+Step by step, this script recovers all 8 of the stack canary bytes.
+
+The important observation is that even after we leaked the stack canary, the main process is still running correctly.
+This means that we could exploit the stack buffer overflow and overwrite the return address with any value we wish, as we previously recovered the stack canary successfully.
