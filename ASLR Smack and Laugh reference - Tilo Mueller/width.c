@@ -2,7 +2,7 @@
 #include <string.h>
 
 void secret(void) {
-    printf("Reached secret function\n!");
+    printf("Reached secret function!\n");
 }
 
 int main(int argc, char *argv[]) {

