@@ -1,0 +1,19 @@
+#!/bin/bash
+
+# Render Markdown to HTML
+PANDOC_FLAGS="--standalone --self-contained --fail-if-warnings --toc --toc-depth=2 --template=./Misc/GitHub.html5"
+
+# Notes
+pandoc $PANDOC_FLAGS ./NOTES.md -o  ./NOTES.html || exit $?
+git add ./NOTES.html
+# Readmes
+pandoc $PANDOC_FLAGS ./README.md -o ./README.html || exit $?
+git add ./README.html
+for dir in ./*/
+do
+    if [ -f "$dir"README.md"" ]; then
+        pandoc $PANDOC_FLAGS "${dir}README.md" -o "${dir}README.html" || exit $?
+        git add "${dir}README.html"
+    fi
+done
+

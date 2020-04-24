@@ -1,3 +1,10 @@
+---
+pagetitle:  Notes for the Stack Buffer Overflow internship at INRIA Sophia
+title:      Notes for the Stack Buffer Overflow internship at INRIA Sophia
+author:     Florian Hofhammer
+date:       2020-04-24
+---
+
 # Virtual Machine setup
 
 The virtual machine used for the experiments is based on the Ubuntu 19.10 Desktop distribution with Linux kernel 5.3.0 and GLIBC 2.30.
@@ -7,7 +14,8 @@ Support for compiling 32 bit executables was added by running
 ```bash
     sudo dpkg --add-architecture i386 # 32 bit packages
     sudo apt-get update
-    sudo apt-get install libc6:i386 libncurses5:i386 libstdc++6:i386 g++-multilib build-essential gdb # install 32 bit libraries and development tools
+    sudo apt-get install libc6:i386 libncurses5:i386 libstdc++6:i386 \
+         g++-multilib build-essential gdb # install 32 bit libraries and development tools
 ```
 
 The machine the VM runs on is based on an Intel Core i5 6300HQ processor.
@@ -52,7 +60,7 @@ As we overwrite the stack with the buffer address, `esp` then points before the 
 Thus, the `ret` instruction fetches the wrong address and the exploit doesn't work.
 
 After having a lot of problems with this issue, I found a comment online suggesting to add the `-mpreferred-stack-boundary=2` compiler flag which instructs `gcc` to align on 4 bytes (2^2) instead of 16 bytes.
-__This additional flag is used throughout all of the following examples!__
+__This additional flag is used throughout all of the following examples if compiled in 32 bit mode!__
 With this change, the same part of the assembly code was generated as follows:
 
 ```asm
@@ -308,6 +316,7 @@ An even more reliable crash can be achieved by just giving `%n` parameters that 
 
 The exploit in this case relies on the executable being loaded to the same address everytime, even if the stack addresses change.
 The exploit itself is pretty easy then:
+
 * Look up the address of the function we want to jump to (here: `secret`) via `gdb` or `objdump`
 * Calculate the string used for overwriting the buffer (here: 16 bytes padding (12 for the buffer, 4 for the frame pointer) + return address)
 * Execute the program (here: `./ret2text $(python -c "print('A' * 16 + '\xff\x91\x04\x08')")`)
@@ -350,6 +359,12 @@ Therefore, the same strategies apply as for shellcode on the stack (e.g. [brute 
 With hardcoded strings in the executable, it is pretty easy to find their addresses using `gdb` or `objdump`.
 If we can then create an executable (here: `echo "/bin/sh" > THIS && chmod 777 THIS && export PATH=.:$PATH`) that has the same name as the first word of one of the hardcoded strings, we can just overwrite the address of one string with the address of another and thus execute a different command than the vulnerable program's author intended to.
 
+The main point to mention here is that the file we're executing (here: `THIS`) not necessarily has to spawn a shell.
+This file can contain any shell script we want.
+For example, if such a vulnerability occurs on a server reachable over the network, we cannot directly access the shell this script spawns if it just contains the `/bin/sh` command as in the example above.
+Thus, we might want to have a shell script that opens a reverse shell over the network or something similar.   
+If and how such a vulnerability can be exploited of course differs from case to case and depends on how we can place the shell script on the vulnerable machine so that the vulnerable program actually executes it.
+
 ### Function pointers
 
 The same as for [string pointers](#string-pointers) applies for function pointers.
@@ -364,7 +379,7 @@ However, this kind of exploit is probably mightier than the string pointer explo
 With the former, we can call whatever function we like.
 Theoretically, it is thus possible to not only call a specific function (here: `system`) but also to create a gadget chain that builds up our shellcode.   
 This might be interesting in the context of the SUID bit being set: with a string pointer redirection, the program itself would already have to invoke `setuid` so that the sub-program we control has the elevated privileges.
-With a function pointer redirection and a ROP chain built up, we can execute whatever we want - e.g. the syscall for setuid and then spawn a shell with the elevated privileges we just obtained.
+With a function pointer redirection and a ROP chain built up, we can execute whatever we want - e.g. the syscall for `setuid` and then spawn a shell with the elevated privileges we just obtained.
 
 ## Integer overflows
 
@@ -419,6 +434,7 @@ In the [stack stethoscope](#stack-stethoscope) section access to the machine was
 We now want to execute an exploit from remote, i.e. without accessing this file.
 
 The approach for such an exploit is the following:
+
 * Exploit the format string vulnerability: return an address from the stack
 * Get the offset of this address from the stack base address by looking into `/proc/PID/stat` once and calculating the offset   
   This can also be done locally as we're not looking for an address but only for an offset.
@@ -448,6 +464,7 @@ Such an overwrite is pretty easy: every string ends with a `0x00` byte.
 When we now overflow a buffer on a little endian machine by the right number of bytes, we don't overwrite the whole pointer but only it's last byte with a null byte.
 
 We thus want to overwrite a buffer as follows:
+
 * Put a NOP sled in the start of the buffer
 * Put shellcode after the NOP sled but before the return address
 * Overwrite the return address and all following stack values with the address of a `ret` instruction from the executable up until the pointer in question
@@ -469,7 +486,7 @@ Thus, the return chain is shortened by one and the last instruction is not a sim
 Therefore, the program enters the return chain as above and returns from one `ret` instruction to the next until it encounters a `pop` instruction, then pops the last value between our return chain and the perfect pointer and finally returns to the perfect pointer (pointing to the shellcode).   
 It doesn't matter which register the `pop` instruction pops into, it is just important that it removes one word from the stack.
 
-As we have a perfect pointer here, the call `./ret2pop "$(./ret2popexploit)"` always works even without a NOP sled because we're automatically pointing to the start of the shellcode without any address ambiguities.
+As we have a perfect pointer here (the pointer to `argv[1]`), the call `./ret2pop "$(./ret2popexploit)"` always works even without a NOP sled because we're automatically pointing to the start of the shellcode without any address ambiguities.
 
 ### ret2esp
 
@@ -624,7 +641,7 @@ Thus, it is easy to leak the canary: whenever we guess right, the process exits 
 Whenever we guess incorrectly, the process yields an error message.
 
 The approach to leak the stack canary is then to overwrite the canary byte by byte until for each byte we don't receive an error message and the process exits normally.
-This is possible because of the [previously](#stack-analysis---`getCanary`-and-`getCanaryThreaded`) observed behavior that the stack canary doesn't change on forking, as the child process' memory is an exact copy of the parent process' memory.
+This is possible because of the [previously](#stack-analysis---getcanary-and-getcanarythreaded) observed behavior that the stack canary doesn't change on forking, as the child process' memory is an exact copy of the parent process' memory.
 This includes the stack including the stack canaries as well.
 
 This is exactly what is done in the [leak_canary.py](./Stack%20canary%20bypassing/leak_canary.py) Python script: it connects to the vulnerable server over and over again and with each request tries to overwrite a byte of the stack canary.
