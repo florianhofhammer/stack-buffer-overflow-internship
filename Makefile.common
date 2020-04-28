@@ -1,23 +1,22 @@
 # This makefile is used for building executables for all .c source files in a directory.
 
-CC=gcc
+CC = gcc
 EXECS = $(patsubst %.c, %, $(wildcard *.c))
 
-.PHONY: default all
-
+.PHONY: all
 # Build all executables by default
-default: all
+.DEFAULT_GOAL: all
 
 # Build all the executables
 all: $(EXECS)
 
-# Compile code to object files
-%.o: %.s
-	$(CC) $(CFLAGS) -c $<
-
 # Compile code to assembly
 %.s: %.c
 	$(CC) $(CFLAGS) -S -c $<
+
+# Compile assembly to object files
+%.o: %.s
+	$(CC) $(CFLAGS) -c $<
 
 # Build executable
 $(EXECS): %: %.o %.s
