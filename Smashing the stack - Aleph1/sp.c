@@ -1,7 +1,10 @@
 #include <stdio.h>
 
 unsigned long get_sp(void) {
-    __asm__("movl %esp,%eax");
+    unsigned long result;
+    asm("movl %%esp,%0"
+        : "=g"(result));
+    return result;
 }
 
 void main() {

