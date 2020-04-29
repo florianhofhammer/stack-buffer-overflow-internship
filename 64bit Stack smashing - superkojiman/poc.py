@@ -1,5 +1,17 @@
 #!/usr/bin/env python3
 
+'''
+Version:        1.0
+Author:         Florian Hofhammer
+Description:    This script tries to exploit the buffer overflow vulnerability in the vulnerable_advanced executable
+                by connecting to it over the network and piping the exploit string to its input over the network.
+                This script only works with the executable compiled with the default compiler flags from the Makefile
+                of this directory. This specifically includes the code not being optimized by the compiler (i.e.
+                without optimization flags or with the -O0 compiler flag for GCC).
+                This script is based on the examplary script given on 
+                https://blog.techorganic.com/2016/03/18/64-bit-linux-stack-smashing-tutorial-part-3/
+'''
+
 from socket import *
 from struct import *
 import telnetlib

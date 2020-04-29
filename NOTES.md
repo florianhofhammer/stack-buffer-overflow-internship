@@ -567,6 +567,49 @@ Giving just the exploit code including the `setreuid` call, this change results 
 For the non-optimized version, the original code has to be used.
 Thus, it is in that case not possible to create a single input that triggers the vulnerability in both the non-optimized and the optimized executable reliably.
 
+### Part 3
+
+For part 3 of the tutorial, the changes are very similar to those conducted for [part 2](#part-2-1) when compiling with optimizations enabled.
+Specifically, stack offsets are different and addresses changed.
+But in addition to that, we also have omissions that enforce some smaller changes to the exploit code.
+
+Firstly, the padding with junk to fill the stack from the start of the buffer up to and including the saved frame pointer, we interestingly now need 184 bytes instead of 168.
+In the original version, 152 bytes (because of the alignment to whole quadwords for a 150 byte buffer) were used to overflow the buffer, 8 for the `ssize_t b` variable and another 8 bytes for the saved frame pointer.
+Now, the `ssize_t b` variable is not saved on the stack anymore but kept in registers thanks to compiler optimizations.
+Theoretically, the stack offset should thus shrink but in practice, the stack offset grows by 16 bytes which I can't explain so far.
+Thus, we have to use a padding of 184 bytes insted of 168 bytes now.
+
+Secondly, addresses changed.
+As the exploit uses fixed addresses for the procedure linking table (PLT) and the global offset table (GOT) as well as the chain of `pop rdi; pop rsi; pop rdx; ret` found in the helper function, those addresses change when compiled with compiler optimizations.
+
+Third, the original exploit made use of the `memset` function and overwrote its GOT entry in order to point to the `system` function instead.
+This is not possible anymore with the executable compiled with optimizations enabled, as `memset` was omitted from the executable and replaced by the following instructions (comments added for clarification):
+
+```asm
+xor    %eax,%eax            # Zero out eax
+mov    $0x12,%ecx           # Number of repetitions (18)
+xor    %edx,%edx            # Zero out edx
+push   %rbp                 # Save base frame pointer
+sub    $0xa8,%rsp           # Increase stack size
+mov    %rsp,%rbp            # Update base frame pointer
+mov    %rbp,%rdi            # Set rdi to base frame pointer (address of buffer)
+rep stos %rax,%es:(%rdi)    # Set ecx quadwords to rax (= 0), starting from rdi (buffer)
+mov    %dx,0x4(%rdi)        # Set rdi + 4 to 0
+movl   $0x0,(%rdi)          # Set rdi to 0
+```
+
+Those instructions set up the buffer and then zero it out.
+Thus, they replace the call to `memset` which would do exactly the same.
+
+As `memset` now is not part of the executable anymore (in the PLT and GOT), an alternative is necessary.
+Luckily, the executable contains several calls to external functions which are listed in the PLT and GOT.
+Therefore, we can use for example `printf` and its PLT and GOT entries instead of those for `memset`.   
+However, we cannot choose an arbitrary function to replace `memset`:
+If we overwrote the GOT entry of `read` instead of `memset`, the exploit would not work anymore as it relies on `read` to manipulate the memory (GOT entries and .bss section).
+
+As a proof of concept for those changes, the [poc_local_optimized.py](./64bit%20Stack%20smashing%20-%20superkojiman/poc_local_optimized.py) Python script manages to spawn a shell and elevate the privileges if the SUID bit is set for the executable compiled with compiler optimizations enabled.
+The differences between `poc_local.py` and `poc_local_optimized.py` can be transferred to the network-based exploits (`poc.py`, `poc_advanced.py`) analogously (changes in padding size and addresses).
+
 # ASLR Smack and Laugh
 
 The [ASLR Smack & Laugh Reference](ttps://api.semanticscholar.org/CorpusID:16401261) by Tilo Müller, published in 2008, describes several methods how to bypass protection by Address Space Layout Randomization built into the Linux kernel.   
