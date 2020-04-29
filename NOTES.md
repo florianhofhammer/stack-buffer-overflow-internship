@@ -2,7 +2,7 @@
 pagetitle:  Notes for the Stack Buffer Overflow internship at INRIA Sophia
 title:      Notes for the Stack Buffer Overflow internship at INRIA Sophia
 author:     Florian Hofhammer
-date:       2020-04-28
+date:       2020-04-29
 ---
 
 # Virtual Machine setup
@@ -580,7 +580,7 @@ Theoretically, the stack offset should thus shrink but in practice, the stack of
 Thus, we have to use a padding of 184 bytes insted of 168 bytes now.
 
 Secondly, addresses changed.
-As the exploit uses fixed addresses for the procedure linking table (PLT) and the global offset table (GOT) as well as the chain of `pop rdi; pop rsi; pop rdx; ret` found in the helper function, those addresses change when compiled with compiler optimizations.
+As the exploit uses fixed addresses for the procedure linkage table (PLT) and the global offset table (GOT) as well as the chain of `pop rdi; pop rsi; pop rdx; ret` found in the helper function, those addresses change when compiled with compiler optimizations.
 
 Third, the original exploit made use of the `memset` function and overwrote its GOT entry in order to point to the `system` function instead.
 This is not possible anymore with the executable compiled with optimizations enabled, as `memset` was omitted from the executable and replaced by the following instructions (comments added for clarification):
@@ -701,6 +701,8 @@ Therefore, the same strategies apply as for shellcode on the stack (e.g. [brute 
 
 With hardcoded strings in the executable, it is pretty easy to find their addresses using `gdb` or `objdump`.
 If we can then create an executable (here: `echo "/bin/sh" > THIS && chmod 777 THIS && export PATH=.:$PATH`) that has the same name as the first word of one of the hardcoded strings, we can just overwrite the address of one string with the address of another and thus execute a different command than the vulnerable program's author intended to.
+
+The [strptrexploit.sh](./ASLR%20Smack%20and%20Laugh%20reference%20-%20Tilo%20Mueller/strptrexploit.sh) bundles all the necessary steps in a shell script.
 
 The main point to mention here is that the file we're executing (here: `THIS`) not necessarily has to spawn a shell.
 This file can contain any shell script we want.
@@ -931,6 +933,47 @@ In conclusion, an exploit is possible (command `./ret2dtors "$(./shellcode)" "$(
 Firstly, it is not possible to use the heap.
 We have to rely on an array in the `.bss` or `.data` section (c.f. [ret2bss](#ret2bss) and [ret2data](#ret2data)), i.e. a global array.   
 Secondly, we have to link the executable with RELRO disabled.
+
+## Optimized compilation
+
+By default, no compiler optimizations were enabled during building all the executables (i.e. `-O0` compiler flag which is active by default in GCC).
+This section describes the differences that occur when recompiling the executables with the `-O3` compiler flag, i.e. GCC's highest optimization options enabled.
+The term "differences" here refers to necessary changes in the code basis or command line commands to get the exploits to work or to significant interesting changes in program or memory layout.
+
+### Return into non-randomized memory
+
+For the `ret2text` executable, the only necessary change is to lower the padding by 4 bytes and change the address we want to jump to.
+This is because the optimized compilation output omits saving the `rbp` register to the stack (i.e. saving the frame pointer).
+Thus, the return address lies directly after the 12 bytes buffer on the stack.
+In addition, the address for the `secret` function changes because GCC rearranges the functions.   
+In conclusion, the command `./ret2text $(python3 -c "import sys; sys.stdout.buffer.write(b'A' * 12 + b'\x60\x92\x04\x08')")` yields the same success [as the previous command](#ret2text).
+However, just calling `./ret2text $(python3 -c "import sys; sys.stdout.buffer.write(b'A' * 12)")` does not work anymore, as the return address then does not point into the secret function anymore as it coincidentally was the case in the non-optimized version.
+
+### Pointer redirecting
+
+The `strptr` executable suddenly is not exploitable anymore, at least not in the way it was intended to.
+There is still a buffer overflow vulnerability which can be used to overwrite the return address.
+
+However, the original exploit aimed to not overwrite the return address, but the pointer to the `conf` string in order to pass the `license` string to the `system` function instead.
+In the non-optimized executable, the addresses of the strings which are located in the `.rodata` section are loaded into variables on the stack (`char *conf` and `char *license`).
+Before executing `puts` and `system`, those addresses are taken from the stack and pushed onto the stack again as parameters to the functions.
+Thus, we can overwrite the stack variable `conf` with the value of `license`, i.e. the address of the other string.
+
+In the optimized executable, the strings' addresses aren't loaded into stack variables anymore.
+They are directly pushed as hardcoded values onto the stack before `puts` or `system` are executed.
+Thus, there is simply no variable that we could overflow and thus pass another string to `system`.
+
+As mentioned in the beginning, the stack buffer overflow vulnerability still exists.
+The [strptrexploit_optimized.sh](./ASLR%20Smack%20and%20Laugh%20reference%20-%20Tilo%20Mueller/strptrexploit_optimized.sh) shell script contains an exploit that still leverages this vulnerability.
+Instead of overwriting a string pointer, this exploit works like a classical exploit that overwrites the return address.
+Here, the return address is overwritten with the address of `system` from the executables procedure linkage table (PLT).
+Additionally, the address of the license string is put onto the stack after the address of `system`.
+Thus, on returning from `main`, the executable calls `system` with the string we originally intended to pass to `system` by overwriting a string pointer as parameter.   
+From this exploit follows that we can achieve exactly the same code execution as with the [exploit aiming at the non-optimized executable](#string-pointers).
+
+The main difference is that this exploit relies on overwriting the return address.
+The original exploit is resilient against stack canaries, as it doesn't tamper with control flow information (return address, saved frame pointer) but only with program data (the string pointers).
+The new exploit however fails in case of stack canaries being activated at compile time, as it strictly has to overwrite the return address.
 
 # Stack canary bypassing
 
