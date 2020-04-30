@@ -120,6 +120,10 @@ This implies that being off by only a single byte probably causes the program to
 
 With modern compilers (see [Virtual machine basic information](#basic-information)), the stack offset is different than that given in Aleph1's original paper: instead of calling `exploit2 600 1564` for a buffer size of 600 bytes filled with shellcode and stack address as well as an offset of 1564 bytes from the base stack address, it is necessary to call `exploit2 600 1660` which uses the same buffer size but a different offset.
 
+The problem is that the offset 1660 might differ from machine to machine and from run to run, as it heavily depends on the stack contents.
+Thus, different environment variables (e.g. a different path, a different working directory, a different username) can heavily influence the necessary offsets, as they change the amount of data on the stack and thus the stack layout.
+It is therefore advised to determine the right address with the help of a debugger or continuing with the other exploits, as it is difficult to hit exactly the one single address that points to the shellcode.
+
 ### exploit3
 
 `exploit3` works exactly the same way as `exploit2` but instead of just writing the shellcode to the buffer, it fills half of the buffer with `NOP` instructions (`0x90` on x86) before writing the shellcode to the buffer.
@@ -129,7 +133,7 @@ It now is completely sufficient to overwrite the return address with an arbitrar
 
 However, it is again not possible to just issue the call provided in the original paper (`exploit3 600`).
 When debugging the `vulnerable` executable, it is easy to see that the return address in fact points into the buffer but only at a part of the buffer where the stack address resides (i.e. to a part of the buffer after the NOP sled and the shellcode).
-Because of the NOP sled in front of the shellcode, it is then pretty easy to find an offset that reliably lets the program return onto the stack where our shellcode resides (e.g. `exploit3 600 350` or `exploit 600 400`).
+Because of the NOP sled in front of the shellcode, it is then pretty easy to find an offset that reliably lets the program return onto the stack where our shellcode resides (e.g. `exploit3 600 350` or `exploit3 600 400`).
 
 ### exploit4
 
