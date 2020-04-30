@@ -2,7 +2,7 @@
 pagetitle:  Notes for the Stack Buffer Overflow internship at INRIA Sophia
 title:      Notes for the Stack Buffer Overflow internship at INRIA Sophia
 author:     Florian Hofhammer
-date:       2020-04-29
+date:       2020-04-30
 ---
 
 # Virtual Machine setup
@@ -735,7 +735,7 @@ The problem that arises is that the maximum positive value of a `char` is 127 an
 If we know input a string longer than 127 bytes (e.g. 128 bytes), we achieve an overflow and we can control the value of the `char` holding the string length.
 If we input for example a string with a length of 128 bytes, `isize` holds the value -128 after measuring the string length because of the overflow and we can copy the input to the buffer and achieve a buffer overflow.
 
-For example with the command `./width $(python3 -c "import sys; sys.stdout.buffer.write(b'A' * 88 + b'\xf6\x91\x04\x08'  + b'A' * 36)")`, we jump to the secret function that is not used during normal execution.
+For example with the command `./width $(python3 -c "import sys; sys.stdout.buffer.write(b'A' * 88 + b'\xf6\x91\x04\x08' + b'A' * 36)")`, we jump to the secret function that is not used during normal execution.
 The first 88 bytes are used for padding until we reach the part of memory where the return address resides, the next four bytes overwrite the return address and the following 36 bytes are necessary to achieve a string length of 128 bytes and thus bypass the length check by overflowing the value of `isize`.
 
 Just like with other methods above, this method could be used for building a ROP chain or similar.
@@ -951,6 +951,8 @@ However, just calling `./ret2text $(python3 -c "import sys; sys.stdout.buffer.wr
 
 ### Pointer redirecting
 
+#### String pointers
+
 The `strptr` executable suddenly is not exploitable anymore, at least not in the way it was intended to.
 There is still a buffer overflow vulnerability which can be used to overwrite the return address.
 
@@ -974,6 +976,182 @@ From this exploit follows that we can achieve exactly the same code execution as
 The main difference is that this exploit relies on overwriting the return address.
 The original exploit is resilient against stack canaries, as it doesn't tamper with control flow information (return address, saved frame pointer) but only with program data (the string pointers).
 The new exploit however fails in case of stack canaries being activated at compile time, as it strictly has to overwrite the return address.
+
+#### Function pointers
+
+A similar observation can be made concerning the `funcptr` executable.   
+Instead of putting a function pointer variable `ptr` onto the stack, assigning the address of the function `function` to it and calling the function, GCC with optimizations enabled recognizes that the value of `ptr` does not depend on user input (apart from the buffer overflow) and also is not otherwise dynamic.
+Thus, this pointer is completely omitted and `function` is called directly without any pointer assignments.
+
+This means that there is no pointer on the stack to overwrite so that we could make use of the buffer overflow to redirect such a pointer.
+
+However, similar to the [string pointer redirection](#string-pointers-1), the buffer overflow vulnerability still exists and can be exploited.
+A possibility would be to overwrite the return address with the address of `system` in the PLT and pass a string address to it.
+As the only strings with known addresses are the arguments to `printf` and `system` in the function `function`, we're very restricted here and basically could only execute code by creating an `echo` executable / shell script in a directory which is part of the PATH environment variable so that we override the original `echo` behavior.
+But for such an exploit, no buffer overflow is necessary, as `echo` is already executed inside of `function`.   
+In addition, such an exploit can easily be mitigated by stack canaries which is not possible with the non-optimized variant of the executable, as in the non-optimized version not the control flow information but only the function's data is overwritteb.
+
+In conclusion, compiling this executable with compiler optimizations enabled still provides a buffer overflow vulnerability but it becomes a lot harder to exploit it and there is no easy way to see how this could be achieved with meaningful results.
+
+### Integer overflow
+
+Concerning the `width` executable, the original exploit does not work anymore if the executable was compiled with the `-O3` compiler flag.
+However, the fix is extraordinarily easy.
+Only offsets and addresses changed because less values are actually put on the stack.
+For example, `char bsize = 64;` is not a stack variable now, but the value `64` for comparisons is hardcoded into the binary code.
+In addition, the `secret` function is now located at another position in the executable because of structural rearrangements.
+
+In general, the kind of exploit and how it works does not change, there is just a need to slightly change the padding and the address.
+Thus, the command `./width $(python3 -c "import sys; sys.stdout.buffer.write(b'A' * 68 + b'\x50\x92\x04\x08' + b'A' * 56)")` reliably lets us jump to the secret function or wherever we want to jump.
+
+For the `signedness` executable, the possibility to achieve a buffer overflow completely disappears.
+With optimization enabled, GCC's analysis determines that the two buffers `char src[1024]` and `char dest[1024]` aren't used in the further program flow and don't contain any specialized data.
+Thus, they simply are completely omitted as well as the call to `memcpy` operating on those buffers.
+Of course, without buffers there is no possibility to overflow them and thus change the control flow.
+
+However, it is still possible to observe the original vulnerability:
+If inputting a negative number, the size check succeeds and the program still prints out how many bytes it intended to copy, even though no actual copying is done.
+
+### Stack divulging methods
+
+For the stack divulging methods, the `divulge` executable which creates a vulnerable network service is used.
+The vulnerability lies in the `function` function:
+This function has a buffer overflow vulnerability to change the control flow as well as a string format vulnerability to leak information about stack layout and addresses.
+
+The original exploit works by overwriting the return address with the address of a buffer where we wrote our shellcode.
+The address of the buffer can be determined manually (by leaking the stack base address with `cat /proc/$(pidof divulge)/stat | awk '{ print $28 }'`) or automatically (by leaking data from the stack with the string format vulnerability).
+In both cases, the return address of `function` is then overwritten with the address of the buffer.
+
+This is were the problem occurs:
+Because of compiler optimizations being enabled, the function `function` was completely inlined into `main`.
+This means that it never returns.
+As `main` itself has an infinite loop, the compiler also didn't include a `ret` instruction for `main`.
+This means that we cannot overwrite a return address which lets us return to user-controlled code, as none of our functions ever returns.   
+Additionally, there are no indirect `call` or `jmp` instructions which depend on stack data that we could theoretically control.
+
+In conclusion, the stack buffer overflow vulnerability still exists but it remains unclear how it could be exploited to gain control over the code execution.
+It is more likely that the string format vulnerability can be exploited to e.g. overwrite entries in the global offset table (GOT).
+However, short experiments showed that even this is not easy, as
+
+1. no "useful" functions like `system`, `execve` or similar can be found in the code and
+2. the program quickly crashes if the input string is expanded too much (e.g. by `%.2000x` string format literals) in `sprintf` and it is thus necessary to overwrite an address in the GOT byte by byte (i.e. several `%hhn` string format literals instead of a single `%n`).
+
+### Stack juggling methods
+
+#### ret2ret
+
+The goal of the [ret2ret](#ret2ret) attack is to overwrite the buffer with return instructions so that the last byte of an existing pointer (here: `int *ptr`) is overwritten with `0x00` and then points into the NOP sled of our shellcode buffer.
+This exploit does not work always, but most of the time.
+
+An interesting observation concerning the optimized version of the executable is that `int no = 1; int *ptr = &no` is completely omitted by the compiler.
+However, the pointer `char *argv[]` (a pointer to a pointer) can be found on the stack.
+Sometimes, this pointers address is close enough to the address of `argv[1]` (which contains the shellcode) so that overwriting the last byte of this pointer and returning to it results in a jump into the NOP sled of our shellcode.
+
+This behavior is much more unreliable than overwriting the last byte of a fixed pointer, as the fixed pointer always points onto the stack with a fixed offset and we only depend on ASLR to generate addresses in such a way that overwriting the last byte with `0x00` results in a valid address inside our NOP sled.
+With the behavior of the optimized executable, we also depend on the execution environment to position the program arguments at addresses that fit our needs.
+
+Of course for the exploit to work, a change for the return address is necessary, as the newly compiled executable has different addresses and offsets of the instructions inside the executable.
+Changing `#define RETADDR 0x080491e6` to `#define RETADDR 0x08049093` in [line 7 of the ret2retexploit.c](./ASLR%20Smack%20and%20Laugh%20reference%20-%20Tilo%20Mueller/ret2retexploit.c#L7) source file and recompiling again fixes this issue.
+
+#### ret2pop
+
+The [ret2pop](#ret2pop) attack works similar to the [ret2ret](#ret2ret) attack:
+We overwrite the return address and following stack space with the address of a return instruction until we reach a pointer we actually want to return to.
+
+In the non-optimized version, this pointer was the function call argument for the function `function` which was a pointer to `argv[1]` which contains our shellcode.
+Because it was passed to the function, a copy of the address was pushed on the stack before calling the function and thus was close in memory / on the stack to our buffer we wanted to overflow.
+
+In the version compiled with compiler optimizations enabled, the function `function` is inlined into `main`.
+Thus, we cannot overwrite the function's return address and return to its function argument.
+But as an alternative, we can overwrite `main`'s return address and return to `argv[1]`.
+The downside of this approach is that the pointer to `argv[1]` is located on the stack pretty far away from our buffer we want to overflow so that we need to overwrite more of the stack with the address of a `ret` instruction.
+
+Basically, instead of returning from `function` to its own argument, we return from `main` to `argv[1]`.
+This can be achieved by changing [lines 7 - 10 of ret2popexploit.c](./ASLR%20Smack%20and%20Laugh%20reference%20-%20Tilo%20Mueller/ret2popexploit.c#L7) from
+
+```c
+#define POPRETADDR 0x08049243
+#define RETADDR 0x08049009
+#define BUFFSIZE 264
+#define CHAINSIZE 4
+```
+
+to
+
+```c
+#define POPRETADDR 0x08049263
+#define RETADDR 0x080490a6
+#define BUFFSIZE 408
+#define CHAINSIZE 152
+```
+
+which adapts the addresses to the differently compiled executable, drastically increases the size of the input we're using to overflow the vulnerable buffer and also increases the chain size (i.e. number of `ret` instructions until we reach the desired location on the stack).
+
+With this change, the exploit works again exactly like it was supposed to.
+
+#### ret2esp
+
+The `ret2esp` executable is also affected by compiler optimizations.
+Firstly, the function `function` containing the vulnerable `strcpy` call is inlined into main.
+Thus, we cannot overwrite the return address of `function` but only that of `main`.
+Secondly, we already had to add the integer `int j = 58623;` to the code in the first place, as this integer in hexadecimal encodes the opcode for `jmp esp`.
+In the optimized version of the executable, this integer is omitted, as it is not used anywhere in the code.
+
+Therefore, we still have a buffer overflow vulnerability but cannot exploit it the way we intended to (`jmp esp` to jump directly to the shellcode on the stack).
+This problem can be solved by adding a `printf("%d\n", j);` call at the end of `main` of [ret2ret.c](./ASLR%20Smack%20and%20Laugh%20reference%20-%20Tilo%20Mueller/ret2esp.c).
+This call enforces that the integer `j` or at least its value is not omitted during compilation, as it is reused in the code.   
+In addition to that, of course the address of the encoded `jmp esp` instruction changed, as the structure of the compiled executable differs when compiled with compiler optimizations enabled.
+Also, `j` is not put on the stack but kept in a register, so that the padding to reach the return address can also be decreased by the amount of memory the integer takes up on the stack (i.e. 4 bytes)
+Thus, it is also necessary to change 
+
+```c
+#define JMPESPADDR 0x80491c5
+#define PADDING 264
+```
+
+to
+
+```c
+#define JMPESPADDR 0x80490bf
+#define PADDING 260
+```
+
+in [ret2retexploit.c](./ASLR%20Smack%20and%20Laugh%20reference%20-%20Tilo%20Mueller/ret2espexploit.c#L7).
+
+Both of the described changes are necessary, as the first one ensures the inclusion of a `jmp esp` instruction and the second one accounts for the changed addresses and stack layout.
+
+#### ret2eax
+
+In the `ret2eax` executable, the vulnerable function `function` is inlined into the main function.
+This poses a problem, as we were relying on implicitly having the register `eax` set to the address of the buffer containing the shellcode, as this address is returned by `strcpy` in the `eax` register.
+Here, we're only returning from `main` but not from the vulnerable function.
+Unfortunately, `eax` does not contain the address of the shellcode buffer anymore on returning from `main`, as `main` returns with the value 0 and thus `eax` is set to 0 by an `xor eax, eax` instruction before the `ret` instruction.
+
+Not even removing the return statement from [ret2eax.c](./ASLR%20Smack%20and%20Laugh%20reference%20-%20Tilo%20Mueller/ret2eax.c#L10) solves this problem, as the compiler then not explicitely, but implicitely returns 0 from `main` and thus outputs the same compiled code.
+
+However, a solution is to change
+
+```c
+int main(int argc, char *argv[]) {
+    function(argv[1]);
+    return 0;
+}
+```
+
+into
+
+```c
+void main(int argc, char *argv[]) {
+    function(argv[1]);
+    return;
+}
+```
+
+as a `void` function has no specific return value and `eax` thus is not modified after calling `printf`.
+Therefore, `eax` still contains the address of the buffer containing the shellcode when `main` returns and as we overwrote the return address with the address of a `call eax` instruction, we're executing the shellcode from the buffer.
+
+An interesting observation is that with this change and no change made to the [actual exploit code](./ASLR%20Smack%20and%20Laugh%20reference%20-%20Tilo%20Mueller/ret2eaxexploit.c), the exploit works for both the non-optimized and the optimized executable.
+This is because the address of the `call eax` instruction stayed the same and we're writing this address to the stack several times so that it in both cases overwrites the return address (no matter whether the return address of `function` or `main`) with the address of `call eax`, even though in the optimized version we also overwrite stack space after the return address (i.e. too much of the stack), but this does no harm to the exploit itself.
 
 # Stack canary bypassing
 

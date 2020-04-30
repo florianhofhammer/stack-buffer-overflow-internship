@@ -6,8 +6,8 @@ LFLAGS= -m32 -no-pie -z execstack
 include ../Makefile.common
 
 .PHONY: optimized
-# Enable compiler optimizations, then run the default target (i.e. all executables)
-optimized: CFLAGS += -O3
+# Enable compiler optimizations and suppress warnings, then run the default target (i.e. all executables)
+optimized: CFLAGS += -O3 -Wno-stringop-overflow
 optimized: .DEFAULT_GOAL
 
 # Suppress warning for format string vulnerability
