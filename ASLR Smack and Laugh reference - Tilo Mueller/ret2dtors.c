@@ -10,6 +10,5 @@ int main(int argc, char *argv[]) {
     char buff[32];
     snprintf(buff, sizeof(buff), argv[2]);
     buff[sizeof(buff) - 1] = '\0';
-
     return 0;
 }

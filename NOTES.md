@@ -505,13 +505,13 @@ As it overwrites 104 bytes, it also overwrites the return address with junk whic
 This issue can easily be resolved with a small change to the exploit script by changing [line 14](./64bit%20Stack%20smashing%20-%20superkojiman/pwn_vulnerable.sh#L14) from
 
 ```bash
-python3 -c "from struct import pack; import sys; sys.stdout.buffer.write(b'A' * 104 + pack('<Q', $(echo $addr)))"
+python3 -c "from struct import pack; import sys; sys.stdout.buffer.write(b'A' * 104 + pack('<Q', $addr))"
 ```
 
 to
 
 ```bash
-python3 -c "from struct import pack; import sys; sys.stdout.buffer.write(b'A' * 88 + pack('<Q', $(echo $addr)) * 3)"
+python3 -c "from struct import pack; import sys; sys.stdout.buffer.write(b'A' * 88 + pack('<Q', $addr) * 3)"
 ```
 
 Instead of providing 104 bytes of junk and an 8 byte address (= 112 bytes total), it then provides 88 bytes of junk and three times an 8 byte address (= 112 bytes total).   
@@ -921,19 +921,20 @@ There are several reasons why this exploit does not work exactly like that:
 3. In the paper by Tilo Müller, he puts the `.dtors` address at the start of the vulnerable string and refers to that address by the eighth format string placeholder.
    He thus has seven format string placeholders in front helping him to control the number to write to the address with the `%n` format string placeholder (e.g. by controlling the length of the output by `%.mx` where `m` is the length to output).
    Because of different behaviour with modern compilers, this is not the case anymore: when putting the address in the front of the string, the first format string placeholder automatically accesses this address.
-   Thus, we can only control the number to write via `%n` by padding the string with junk between the address and the `%n` placeholder.
-   This is a problem because the command line (here: bash 5.0.3) only accepts string of a certain length as parameter to a function.
+   Thus, we can for example control the number to write via `%n` by padding the string with junk between the address and the `%n` placeholder.
+   This is a problem because the command line (here: bash 5.0.16) only accepts string of a certain length as parameter to a function.
    Because hex addresses transformed into decimal numbers are huge and our padding thus has to be extremely long, we cannot directly write the address we want with the help of `%n`.    
-   When looking at the data in `.fini_array`, we see that the pointer located there points to an address starting with 0x0804.
+   When looking at the data in `.fini_array`, we see that the pointer located there points to an address starting with `0x0804`.
    The address located there thus is in the address space of our ELF executable.
    It is thus sufficient to overwrite only the lower two bytes of this pointer with the lower two bytes of the address of our array in the `.bss` section.
-   This can be achieved by using `%hn` instead of `%n` as format string placeholder.
+   This can be achieved by using `%hn` instead of `%n` as format string placeholder.   
+   As an alternative, we could also specifically refer to the address as the first parameter on the stack by `%1$.hn` and pad with `%.mx` where `m` is the length to output before as originally intended.
 4. The `.fini_array` section is subject of RELRO (relocation read-only).
    Even though it is marked writable in the output of `readelf -S ret2dtors`, it is marked as read-only by the dynamic linker on program start.
    Thus, we only get a segmentation fault when trying to overwrite a pointer in this section like described above.   
    The solution is to disable RELRO by passing the additional linker flag `-z norelro` when linking the executable.
 
-In conclusion, an exploit is possible (command `./ret2dtors "$(./shellcode)" "$(python3 -c "import sys; sys.stdout.buffer.write(b'\x68\xb1\x04\x08' + b'A' * 45724 + b'%hn')")"` where `shellcode` is a helper executable just outputting shellcode (see [shellcode.c](./ASLR%20Smack%20and%20Laugh%20reference%20-%20Tilo%20Mueller/shellcode.c))) but only with severe changes.   
+In conclusion, an exploit is possible (commands `./ret2dtors "$(./shellcode)" "$(python3 -c "import sys; sys.stdout.buffer.write(b'\x68\xb1\x04\x08' + b'A' * 45724 + b'%hn')")"` or `./ret2dtors "$(./shellcode)" "$(python3 -c "import sys; sys.stdout.buffer.write(b'\x68\xb1\x04\x08 %.45722x %1$.hn')")"` where `shellcode` is a helper executable just outputting shellcode (see [shellcode.c](./ASLR%20Smack%20and%20Laugh%20reference%20-%20Tilo%20Mueller/shellcode.c))) but only with severe changes.   
 Firstly, it is not possible to use the heap.
 We have to rely on an array in the `.bss` or `.data` section (c.f. [ret2bss](#ret2bss) and [ret2data](#ret2data)), i.e. a global array.   
 Secondly, we have to link the executable with RELRO disabled.
@@ -1156,6 +1157,81 @@ Therefore, `eax` still contains the address of the buffer containing the shellco
 
 An interesting observation is that with this change and no change made to the [actual exploit code](./ASLR%20Smack%20and%20Laugh%20reference%20-%20Tilo%20Mueller/ret2eaxexploit.c), the exploit works for both the non-optimized and the optimized executable.
 This is because the address of the `call eax` instruction stayed the same and we're writing this address to the stack several times so that it in both cases overwrites the return address (no matter whether the return address of `function` or `main`) with the address of `call eax`, even though in the optimized version we also overwrite stack space after the return address (i.e. too much of the stack), but this does no harm to the exploit itself.
+
+### GOT hijacking - ret2got
+
+The [ret2got](#got-hijacking---ret2got) exploit does not work anymore as it is pretty similar to the [string pointer redirection](#string-pointers) exploit.
+Here, the goal is to overwrite the pointer `ptr` on the stack so that the pointer points to the global offset table (GOT).
+The next `strcpy(ptr, argv[2]);` call then copies the second command line argument into the GOT instead of into the provided buffer.
+
+Because of compiler optimizations, the pointer `char *ptr` is completely omitted.
+There is also no easy way to force the program to insert this pointer as it is always calculated relative to the buffer address on the fly (i.e. instead of loading the desired address from the stack (from `ptr`), it is calculated via `lea` assembly instructions (relative to `char array[8]`)).
+Thus, there is simply no address on the stack that we could manipulate so that the write destination of `strcpy` changes.
+
+However, there is a way to get the exploit working again because the buffer overflow vulnerability is not automatically patched by these optimizations.
+Instead of overwriting the pointer, we can still classically overwrite the return address with the address of `system` and put the corresponding argument (i.e. the address of a string) onto the stack.
+This allows us to still execute any program we want.
+However, we now rely on no stack canaries being present, as we not only overwrite non-protected data but also protected control flow information on the stack.
+
+The [final exploit](./ASLR%20Smack%20and%20Laugh%20reference%20-%20Tilo%20Mueller/ret2gotexploit_optimized.sh) (working only with the optimized variant of the executable) is then pretty similar to the [exploit](./ASLR%20Smack%20and%20Laugh%20reference%20-%20Tilo%20Mueller/strptrexploit_optimized.sh) for the [optimized string pointer redirection](#string-pointers-1).
+
+### Off by one
+
+The [off-by-one exploit](#off-by-one) is based on two things:
+
+1. Directly after the vulnerable buffer there is control flow information on the stack.
+2. That control flow information (usually) is the saved frame pointer which (when modified to point to a lower address by overwriting the least significant byte with `0x00`) enables us to set the stack pointer to that address in the function we return to so that that function returns to a controlled address instead of the original return address.
+
+Both of those points are not satisfied when the `offbyone` executable is compiled with compiler optimizations enabled.   
+There is simply no control flow information on the stack directly after the vulnerable buffer when looking at the stack frame of the `save` function.
+Firstly, instead of frame base pointer relative addressing (i.e. saving the old frame base pointer to the stack (= saved frame pointer), replacing the frame base pointer with the new frame base pointer (`mov %esp, %ebp`), addressing relative to `ebp` (e.g. `pushl 0x8(%ebp)`)), the optimized executable uses stack pointer relative addressing (i.e. does not save nor use the `ebp` register but only `esp` (e.g. `mov 0x108(%esp), %ebx`)).   
+Secondly, the optimized variant uses `ebx` as a register regularly which is a [callee-saved register](https://en.wikipedia.org/wiki/X86_calling_conventions#Register_preservation).
+Thus, instead of `ebp`, `ebx` is pushed onto the stack (i.e. saved) in the function prologue and popped from the stack (i.e. restored) in the function epilogue (see assembly below).
+As `ebx` in our case does not contain any useful control flow information (in fact, it does not contain any useful information at all as the register's content is discarded after returning from the `save` function), we cannot gain any control by overwriting the least significant byte with `0x00` (which is all we can do by this kind of exploit).
+Thus, we cannot control the control flow by overwriting meaningful data.
+
+As a reference, the function prologue and epilogue in the non-optimized executable are of the form (comments added for clarification)
+
+```asm
+push   %ebp         # save ebp
+mov    %esp,%ebp    # set new ebp
+sub    $0x100,%esp  # increase stack size
+.
+.
+.
+leave               # restore ebp (leave == mov %ebp, %esp; pop %ebp)
+ret                 # return
+```
+
+whereas in the optimized executable they are of the form (comments added for clarification)
+
+```asm
+push   %ebx         # save ebx
+sub    $0x100,%esp  # increase stack size
+.
+.
+.
+add    $0x10c,%esp  # reduce stack size
+pop    %ebx         # restore ebx
+ret                 # return
+```
+
+These code examples support the above points concerning the non-exploitability of the off-by-one-vulnerability in this case.
+
+### Overwriting .dtors
+
+Of course for the optimized executable the same restrictions and changes apply as for the non-optimized executable (c.f. [the section about the original exploit](#overwriting-.dtors)).
+
+The same exploit works with three slight changes:
+
+1. The address of the `.fini_array` section now is `0x0804b17c` instead of `0x0804b168`.
+   Thus, the address (provided at the start of the exploit string) has to be changed.
+2. When we want to reference that address from the exploit string, it is not the first argument to `snprintf` on the stack (i.e. accessed by the `%hn` format string placeholder) but the fourth (i.e. accessed by the `%4$.hn` format string placeholder).
+3. The address of the `globalbuff` array in the `.bss` section changed.
+   Concretely, it increased by 32 which is why we also have to increase the number to overwrite the address in `.fini_array` with by 32 (i.e. 45756 "A"s for padding instead of 45724).
+   If using a `%x` format string placeholder instead of the "A"s for padding, we can also write `%.45756x` instead for expanding the format string to the correct length we need.
+
+Thus, we can either use `./ret2dtors "$(./shellcode)" "$(python3 -c "import sys; sys.stdout.buffer.write(b'\x7c\xb1\x04\x08' + b'A' * 45756 + b'%4$.hn')")"` (padding with "A"s) or `./ret2dtors "$(./shellcode)" "$(python3 -c "import sys; sys.stdout.buffer.write(b'\x7c\xb1\x04\x08 %.45754x %4$.hn')")"` (format string expansion, 45754 here because of the two spaces) for a working exploit after adapting the addresses and offsets.
 
 # Stack canary bypassing
 
