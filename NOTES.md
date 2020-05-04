@@ -1296,3 +1296,34 @@ Step by step, this script recovers all 8 of the stack canary bytes.
 
 The important observation is that even after we leaked the stack canary, the main process is still running correctly.
 This means that we could exploit the stack buffer overflow and overwrite the return address with any value we wish, as we previously recovered the stack canary successfully.
+
+## Optimized compilation
+
+Similar to the previous sections, the results differ when compiling with compiler optimizations enabled via the `-O3` compiler flag.
+
+### Stack analysis - `getCanary` and `getCanaryThreaded`
+
+Those two executables still work just as [previously](#stack-analysis---getcanary-and-getcanarythreaded) described.
+The only difference is that the stack layout is a little bit different because some stack variables were optimized away and/or are now only kept in registers.
+
+For example, in the `getCanary` executable the array `uint8_t buf[8]` in `main` is optimized away as it is never reused after it is initialized and its value is set.
+Additionally, `uint64_t *ptr` and `uint64_t i` in `func` are omitted because instead of setting a base address (`ptr`) and adding to or subtracting from that address and additionally keeping a counter (`i`) for comparisons, a base address (`buf - 0x18` == `buf - 24` == `ptr - 3` as `ptr` is a pointer to an 8 bytes wide value and `buf` is a pointer to an 1 byte wide value) is used, incremented by 8 (bytes) on each iteration and directly compared to a target address (`buf + 0x88` == `buf + 136` == `ptr + 17`).
+
+Apart from such smaller changes, the executables still work as expected and output stack contents, including the stack canaries which can still be identified as they can be found directly after the buffer that was filled with the value `0x41` (which is the hexadecimal representation of the ASCII letter A).
+
+
+### Brute force leaking
+
+The Linux man page for `feature_test_macros` (shell command `man feature_test_macros` or found [on web versions of the man page](http://man7.org/linux/man-pages/man7/feature_test_macros.7.html)) states the following:
+
+> If  _FORTIFY_SOURCE is set to 1, with compiler optimization level 1 (gcc -O1) and above, checks that shouldn't change the behavior of conforming programs are performed.
+> With _FORTIFY_SOURCE set to 2, some more checking is added, but some conforming programs might fail.
+
+Because of _FORTIFY_SOURCE being set to 2 by default, the stack canary leaking from the `echoserver` executable does not work anymore.
+Instead of making a call to `read` in the `echo` function, `__read_chk` is called.
+This function is a wrapper around `read` which checks for buffer overflows on runtime.
+As the call to `read` is intentionally vulnerable, this overflow check yields a positive result (i.e. an overflow is detected) and thus cancels the operation and kills the program before the overflow can be exploited.
+Thus, it is not possible to leak the stack canary with such measures enabled.
+
+If adding the `-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0` compiler flags, such checks are disabled and the stack canary can be leaked in exactly the same way as it was the case for the non-optimized version of the `echoserver` executable.
+Even though some optimizations are made (e.g. keeping the `int fd` argument to the `echo` function and the `ssize_t n` variable only in registers instead of putting them on the stack) and the stack layout thus may differ, no inlining or otherwise destructive (destructive concerning the success of the exploit) optimizations are made by the compiler.
