@@ -205,7 +205,6 @@ higher address |                             |
                | buffer[3 - 0]               |     |
                +-----------------------------+  ---+
 lower address  |                             |
-
 ```
 
 Stack with optimization (each row corresponds to 4 bytes):
@@ -227,7 +226,6 @@ higher address |                             |
                | buffer[3 - 0]               |     |
                +-----------------------------+  ---+
 lower address  |                             |
-
 ```
 
 ### example3.c
@@ -1296,6 +1294,57 @@ Step by step, this script recovers all 8 of the stack canary bytes.
 
 The important observation is that even after we leaked the stack canary, the main process is still running correctly.
 This means that we could exploit the stack buffer overflow and overwrite the return address with any value we wish, as we previously recovered the stack canary successfully.
+
+## Extended brute force leaking
+
+The [above section](#brute-force-leaking) describes how the stack canary of a fictional vulnerable server that is based on forking in order to handle requests can be leaked.
+
+An interesting approach is then to extend this idea in order to not only gather information about the address space of the executable in order to bypass the restrictions imposed by ASLR.
+The idea based on the following stack layout (each row corresponds to 8 bytes):
+
+```
+higher address |                             |
+               +-----------------------------+  ---+
+               | return address              |     |
+               +-----------------------------+     |
+               | saved frame pointer         |     |
+               +-----------------------------+     |
+               | stack canary                |     |
+               +-----------------------------+     |
+               | n                           |     +--- stack frame of echo
+               +-----------------------------+     |
+               | buffer[255 - 248]           |     |
+               | buffer[247 - 240]           |     |
+               |            ...              |     |
+               | buffer[15 - 8]              |     |
+               | buffer[7 - 0]               |     |
+               +-----------------------------+  ---+
+lower address  |                             |
+```
+
+We could then try to leak the stack canary with the known approach.
+After we know the stack canary, we could simply append it to the padding (used to overwrite `buffer` and `n`) and try the same approach for the saved frame pointer and later again for the return address.
+
+If we manage to leak the saved frame pointer with this approach, we can determine stack addresses by analyzing the stack layout or determining offsets and with the help of some offsets the stack base address.   
+If we manage to leak the return address with this approach, we can determine the base address where the ELF executable is loaded into memory, as we know the offset of the original return address from the base address (determined via `objdump -d echoserver` from the position independent executable).
+
+The former result could help us to manipulate specific stack contents, the latter result could allow us to create ROP chains making use of the code found in the executable.
+With such ROP chains, we could maybe even leak addresses saved in the global offset table and thus determine the base address where libc is loaded.
+
+As the server forks on each request, the memory layout is the same for each request and we can thus apply information gathered by one request on any following requests to the server.
+
+However, there is a problem with this idea:
+The brute force script ([poc.py](./Stack%20canary%20bypassing/poc.py) Python script) relies on the server's behavior concerning success messages (here: "OK" as success message).
+When we overwrite the stack canary with a wrong value, the server immediately aborts on trying to return from the `echo` function and thus never sends the success message.
+Thus, the client knows that the value was incorrect.   
+The behavior is a little bit different concerning the saved frame pointer or the return address.
+If we provide incorrect values for those, the server is likely to crash with a segmentation fault or an illegal instruction fault or some similar errors when trying to return from `echo`.
+However, it is just likely to crash, it does not crash necessarily.
+For example, if we overwrite the return address in such a way that the program returns to valid code (e.g. in `main`, right before the call to `echo`), the server could still return a success message and the client would assume that it found the correct value even if it is not the case.
+The other way round, the server could return to valid code and continue working just fine (e.g. by returning into `main` so that only exactly the sending of the success message is skipped) but the client would assume that an error occured because no success message was received.
+
+Those examples show that concerning the saved frame pointer and the return address, the brute force script might not be able to really distinguish between a crashed server because of incorrect values or a only seemingly crashed server.
+Because of that, those values cannot be determined reliably and other approaches have to be evaluated.
 
 ## Optimized compilation
 

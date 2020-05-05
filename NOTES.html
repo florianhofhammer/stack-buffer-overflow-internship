@@ -170,6 +170,7 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <li><a href="#stack-canary-bypassing">Stack canary bypassing</a><ul>
 <li><a href="#stack-analysis---getcanary-and-getcanarythreaded">Stack analysis - <code>getCanary</code> and <code>getCanaryThreaded</code></a></li>
 <li><a href="#brute-force-leaking">Brute force leaking</a></li>
+<li><a href="#extended-brute-force-leaking">Extended brute force leaking</a></li>
 <li><a href="#optimized-compilation-3">Optimized compilation</a></li>
 </ul></li>
 </ul>
@@ -265,8 +266,7 @@ Because of how the stack is organized in this case, we don’t get a segmentatio
                | buffer[7 - 4]               |     |
                | buffer[3 - 0]               |     |
                +-----------------------------+  ---+
-lower address  |                             |
-</code></pre>
+lower address  |                             |</code></pre>
 <p>Stack with optimization (each row corresponds to 4 bytes):</p>
 <pre><code>higher address |                             |
                +-----------------------------+  ---+
@@ -284,8 +284,7 @@ lower address  |                             |
                | buffer[7 - 4]               |     |
                | buffer[3 - 0]               |     |
                +-----------------------------+  ---+
-lower address  |                             |
-</code></pre>
+lower address  |                             |</code></pre>
 <h3 id="example3.c-1">example3.c</h3>
 <p>With <a href="./Smashing%20the%20stack%20-%20Aleph1/example3.c">example3.c</a>, the code also does not do what we expect, namely output <code>0</code> because we overwrote the return pointer of <code>function</code> in a way so that the <code>x = 1;</code> assignment is omitted. Here, the reason for this behavior is not inlining a function as we had previously but completely omitting a function.</p>
 <p>When disassembling the corresponding executable, we can see that the function <code>function</code> simply is completely omitted from the compiler output. This is because of four reasons:</p>
@@ -758,6 +757,34 @@ The child process in the meantime reads into a buffer. However, the maximum numb
 <p>The approach to leak the stack canary is then to overwrite the canary byte by byte until for each byte we receive a success message and the process exits normally. This is possible because of the <a href="#stack-analysis---getcanary-and-getcanarythreaded">previously</a> observed behavior that the stack canary doesn’t change on forking, as the child process’ memory is an exact copy of the parent process’ memory. This includes the stack including the stack canaries as well.</p>
 <p>This is exactly what is done in the <a href="./Stack%20canary%20bypassing/leak_canary.py">leak_canary.py</a> Python script: it connects to the vulnerable server over and over again and with each request tries to overwrite a byte of the stack canary. If it succeeds (i.e. a success message is returned), the current byte is saved and the next canary byte is evaluated. Step by step, this script recovers all 8 of the stack canary bytes.</p>
 <p>The important observation is that even after we leaked the stack canary, the main process is still running correctly. This means that we could exploit the stack buffer overflow and overwrite the return address with any value we wish, as we previously recovered the stack canary successfully.</p>
+<h2 id="extended-brute-force-leaking">Extended brute force leaking</h2>
+<p>The <a href="#brute-force-leaking">above section</a> describes how the stack canary of a fictional vulnerable server that is based on forking in order to handle requests can be leaked.</p>
+<p>An interesting approach is then to extend this idea in order to not only gather information about the address space of the executable in order to bypass the restrictions imposed by ASLR. The idea based on the following stack layout (each row corresponds to 8 bytes):</p>
+<pre><code>higher address |                             |
+               +-----------------------------+  ---+
+               | return address              |     |
+               +-----------------------------+     |
+               | saved frame pointer         |     |
+               +-----------------------------+     |
+               | stack canary                |     |
+               +-----------------------------+     |
+               | n                           |     +--- stack frame of echo
+               +-----------------------------+     |
+               | buffer[255 - 248]           |     |
+               | buffer[247 - 240]           |     |
+               |            ...              |     |
+               | buffer[15 - 8]              |     |
+               | buffer[7 - 0]               |     |
+               +-----------------------------+  ---+
+lower address  |                             |</code></pre>
+<p>We could then try to leak the stack canary with the known approach. After we know the stack canary, we could simply append it to the padding (used to overwrite <code>buffer</code> and <code>n</code>) and try the same approach for the saved frame pointer and later again for the return address.</p>
+<p>If we manage to leak the saved frame pointer with this approach, we can determine stack addresses by analyzing the stack layout or determining offsets and with the help of some offsets the stack base address.<br />
+If we manage to leak the return address with this approach, we can determine the base address where the ELF executable is loaded into memory, as we know the offset of the original return address from the base address (determined via <code>objdump -d echoserver</code> from the position independent executable).</p>
+<p>The former result could help us to manipulate specific stack contents, the latter result could allow us to create ROP chains making use of the code found in the executable. With such ROP chains, we could maybe even leak addresses saved in the global offset table and thus determine the base address where libc is loaded.</p>
+<p>As the server forks on each request, the memory layout is the same for each request and we can thus apply information gathered by one request on any following requests to the server.</p>
+<p>However, there is a problem with this idea: The brute force script (<a href="./Stack%20canary%20bypassing/poc.py">poc.py</a> Python script) relies on the server’s behavior concerning success messages (here: “OK” as success message). When we overwrite the stack canary with a wrong value, the server immediately aborts on trying to return from the <code>echo</code> function and thus never sends the success message. Thus, the client knows that the value was incorrect.<br />
+The behavior is a little bit different concerning the saved frame pointer or the return address. If we provide incorrect values for those, the server is likely to crash with a segmentation fault or an illegal instruction fault or some similar errors when trying to return from <code>echo</code>. However, it is just likely to crash, it does not crash necessarily. For example, if we overwrite the return address in such a way that the program returns to valid code (e.g. in <code>main</code>, right before the call to <code>echo</code>), the server could still return a success message and the client would assume that it found the correct value even if it is not the case. The other way round, the server could return to valid code and continue working just fine (e.g. by returning into <code>main</code> so that only exactly the sending of the success message is skipped) but the client would assume that an error occured because no success message was received.</p>
+<p>Those examples show that concerning the saved frame pointer and the return address, the brute force script might not be able to really distinguish between a crashed server because of incorrect values or a only seemingly crashed server. Because of that, those values cannot be determined reliably and other approaches have to be evaluated.</p>
 <h2 id="optimized-compilation-3">Optimized compilation</h2>
 <p>Similar to the previous sections, the results differ when compiling with compiler optimizations enabled via the <code>-O3</code> compiler flag.</p>
 <h3 id="stack-analysis---getcanary-and-getcanarythreaded-1">Stack analysis - <code>getCanary</code> and <code>getCanaryThreaded</code></h3>
