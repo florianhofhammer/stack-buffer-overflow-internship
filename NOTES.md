@@ -1283,15 +1283,15 @@ On new connections, it forks and lets the newly created child process handle the
 The child process in the meantime reads into a buffer.
 However, the maximum number of bytes to read from the input stream is bigger than the buffer which is why we can achieve a buffer overflow.
 When we overwrite the stack canary, the process exits with an error message stating that "stack smashing [has been] detected".
-Thus, it is easy to leak the canary: whenever we guess right, the process exits normally.
-Whenever we guess incorrectly, the process yields an error message.
+Thus, it is easy to leak the canary: whenever we guess right, the process outputs a success message to the remote shell (i.e. the client's shell) and exits normally.
+Whenever we guess incorrectly, the process yields an error message on the local shell (i.e. the server's shell).
 
-The approach to leak the stack canary is then to overwrite the canary byte by byte until for each byte we don't receive an error message and the process exits normally.
+The approach to leak the stack canary is then to overwrite the canary byte by byte until for each byte we receive a success message and the process exits normally.
 This is possible because of the [previously](#stack-analysis---getcanary-and-getcanarythreaded) observed behavior that the stack canary doesn't change on forking, as the child process' memory is an exact copy of the parent process' memory.
 This includes the stack including the stack canaries as well.
 
 This is exactly what is done in the [leak_canary.py](./Stack%20canary%20bypassing/leak_canary.py) Python script: it connects to the vulnerable server over and over again and with each request tries to overwrite a byte of the stack canary.
-If it succeeds (i.e. no error message is returned), the current byte is saved and the next canary byte is evaluated.
+If it succeeds (i.e. a success message is returned), the current byte is saved and the next canary byte is evaluated.
 Step by step, this script recovers all 8 of the stack canary bytes.
 
 The important observation is that even after we leaked the stack canary, the main process is still running correctly.

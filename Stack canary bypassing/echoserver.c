@@ -48,10 +48,9 @@ int main(int argc, char *argv[]) {
     while (1) {
         fd = accept(sock, NULL, NULL);
         if ((pid = fork()) == 0) {
-            // Also output errors to the client
-            dup2(fd, STDERR_FILENO);
             // Child process echoes the input ....
             echo(fd);
+            write(fd, "OK\n", 3);
             close(fd);
             // ... and then exits
             exit(EXIT_SUCCESS);
