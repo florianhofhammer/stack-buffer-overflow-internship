@@ -1346,6 +1346,17 @@ The other way round, the server could return to valid code and continue working 
 Those examples show that concerning the saved frame pointer and the return address, the brute force script might not be able to really distinguish between a crashed server because of incorrect values or a only seemingly crashed server.
 Because of that, those values cannot be determined reliably and other approaches have to be evaluated.
 
+An interesting observation is that this approach seems to work if a short delay between requests to the server is introduced.
+Without any delay, `echoserver` processes are spawned so quickly on the server that the main memory runs full as those processes have to wait for TCP connections to close (TIME_WAIT) and they thus cannot exit immediately after having finished the main work.   
+With a delay introduced, the server isn't hit with requests as hard and thus the memory does not fill up completely as fast.
+This seems to make the approach described in this section much more reliable.
+The `poc.py` script can thus determine the stack canary, saved frame pointer and return address in most of the cases.
+Additional measures that increased the success reliability were to increase the memory of the virtual machine (4GiB => 8GiB) and wait between several runs until all TCP sessions are closed (open connections determined via `netstat -tupan`).   
+Those observations imply that errors from this exploit might be more related to memory/computational issues than to logical issues concerning the overwritten values.
+
+In conclusion, even though this attack does not always work, it works most of the time.
+We not only reveal the stack canary but also the saved frame pointer which gives us information about stack addresses and the return address which gives us information about where the executable is loaded into memory.
+
 ## Optimized compilation
 
 Similar to the previous sections, the results differ when compiling with compiler optimizations enabled via the `-O3` compiler flag.

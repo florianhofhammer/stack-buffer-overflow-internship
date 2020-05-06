@@ -12,3 +12,9 @@ optimized: .DEFAULT_GOAL
 
 # Link getCanaryThreaded executable against pthread library
 getCanaryThreaded: LFLAGS += -lpthread
+
+.PHONY: clean cleanpy
+cleanpy:
+	-rm -r __pycache__
+
+clean: cleanpy
