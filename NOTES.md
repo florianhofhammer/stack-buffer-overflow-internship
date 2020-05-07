@@ -2,7 +2,7 @@
 pagetitle:  Notes for the Stack Buffer Overflow internship at INRIA Sophia
 title:      Notes for the Stack Buffer Overflow internship at INRIA Sophia
 author:     Florian Hofhammer
-date:       2020-04-30
+date:       2020-05-07
 ---
 
 # Virtual Machine setup
@@ -11,7 +11,9 @@ date:       2020-04-30
 
 The virtual machine used for the experiments is based on the Ubuntu 20.04 Desktop distribution with Linux kernel 5.4.0, GLIBC 2.31 and GCC 9.3.0 and runs in VirtualBox 6.1.
 Updates are regularly installed to keep the system up to date.   
-ASLR is permanently deactivated on the machine by issuing the command `echo "kernel.randomize_va_space = 0" | sudo tee /etc/sysctl.d/01-disable-aslr.conf`.   
+ASLR is activated or deactivated on a case-to-case basis, as some of the exploits require ASLR to be turned off.
+However, as ASLR is enabled by default in modern Linux kernels, it has to be disabled manually if necessary.
+Turning ASLR off can be achieved by the command `echo 0 | sudo tee /proc/sys/kernel/randomize_va_space`, turning it back on by the command `echo 2 | sudo tee /proc/sys/kernel/randomize_va_space`.   
 Support for compiling 32 bit executables was added by running
 ```bash
     sudo dpkg --add-architecture i386 # 32 bit packages
@@ -66,10 +68,11 @@ However, they can greatly reduce the time to find bugs and improve the exploit d
 
 As a starting exercise, I am trying to recreate the examples and exploits from the [original paper](http://phrack.org/issues/49/14.html#article).
 The compiler / linker flags for `gcc` generally used are `-m32 -fno-stack-protector -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 -g -z execstack` (see e.g. the [common Makefile](./Makefile.common) and the [directory specific Makefile](./Smashing%20the%20stack%20-%20Aleph1/Makefile)).
-Without those, current stack overflow mitigation measures do not allow to successfully overflow the buffers on the stack as described in the paper.
+ASLR is turned off for this section.
+Without those measures, current stack overflow mitigation measures do not allow to successfully overflow the buffers on the stack as described in the paper.
 
 ## example3.c
-The executable only provided a segfault because the return address was incorrectly overwritten (checked with `gdb`).
+The executable only yielded a segfault because the return address was incorrectly overwritten (checked with `gdb`).
 In order to correctly overwrite the return address, it is necessary to change the offset from `buffer1` from `12` to `13`, as the offset was off by one byte.
 
 ## overflow1.c
@@ -360,7 +363,7 @@ This way, we can work around the restriction that the NX bit might be set on the
 
 The necessary steps are the following:
 
-1. Find the address of the `system` function in libc via `gdb` (note: ASLR is still disabled, the address thus stays the same)
+1. Find the address of the `system` function in libc via `gdb` (note: ASLR is still disabled, the address thus doesn't change between executions)
 2. Find a pointer to the string "/bin/sh" (easy, already included in the executable (see [vulnerable.c](./64bit%20Stack%20smashing%20-%20superkojiman/vulnerable.c#L14)))
 3. Find a gadget to load the pointer to this string into the register `rdi` before calling `system` (can be found in `__libc_csu_init`)
 4. Combine the addresses and run it
@@ -1235,6 +1238,8 @@ Thus, we can either use `./ret2dtors "$(./shellcode)" "$(python3 -c "import sys;
 
 In the previous sections, I have described how to bypass ASLR, non-executable stack, etc. based on several tutorials.
 This section now aims to bypass stack protection by stack canaries and analyzes how stack canaries are used.
+
+For the whole section, ASLR is enabled.
 
 ## Stack analysis - `getCanary` and `getCanaryThreaded`
 

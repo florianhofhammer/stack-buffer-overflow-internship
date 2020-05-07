@@ -2,7 +2,20 @@
 
 from pwn import *
 
-def leak(padding=b'', description='canary', length=8, host='localhost', port=2323, delay=0):
+
+def leak(padding: bytes = b'', description: str = 'canary', length: int = 8, host: str = 'localhost', port: int = 2323, delay: int = 0) -> bytes:
+    '''
+    Leak information from the stack of a remote server (that does not change the stack layout between requests).
+
+    :param padding:     The padding before the value to leak
+    :param description: The description of the value to leak. Only used for logging purposes
+    :param length:      The number of bytes to leak. Usually 8 = 64 bits
+    :param host:        The host on which the server we're trying to leak information from is running
+    :param port:        The port the server is listening on
+    :param delay:       Delay (in seconds) between requests to the server
+
+    :returns:           The leaked bytes
+    '''
 
     leak_val = b''
     reply = b''
@@ -40,6 +53,7 @@ def leak(padding=b'', description='canary', length=8, host='localhost', port=232
                 log.error('Trapped in infinite loop')
 
     return leak_val
+
 
 if __name__ == '__main__':
     print('Import this module via "import leakmod"')
