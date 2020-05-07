@@ -1300,6 +1300,11 @@ This means that we could exploit the stack buffer overflow and overwrite the ret
 The [above section](#brute-force-leaking) describes how the stack canary of a fictional vulnerable server that is based on forking in order to handle requests can be leaked.
 
 An interesting approach is then to extend this idea in order to not only gather information about the address space of the executable in order to bypass the restrictions imposed by ASLR.
+
+The following attacks are all targeting the `echoserver` executable already mentioned in the [previous section](#brute-force-leaking).
+
+### Leaking saved frame pointer and return instruction pointer / return address
+
 The idea based on the following stack layout (each row corresponds to 8 bytes):
 
 ```
@@ -1351,11 +1356,65 @@ Without any delay, `echoserver` processes are spawned so quickly on the server t
 With a delay introduced, the server isn't hit with requests as hard and thus the memory does not fill up completely as fast.
 This seems to make the approach described in this section much more reliable.
 The `poc.py` script can thus determine the stack canary, saved frame pointer and return address in most of the cases.
-Additional measures that increased the success reliability were to increase the memory of the virtual machine (4GiB => 8GiB) and wait between several runs until all TCP sessions are closed (open connections determined via `netstat -tupan`).   
+Additional measures that increased the success reliability were to increase the memory of the virtual machine (4GiB => 8GiB) and wait between several runs until all TCP sessions are closed (open connections can be determined via `netstat -tupan`).   
 Those observations imply that errors from this exploit might be more related to memory/computational issues than to logical issues concerning the overwritten values.
 
 In conclusion, even though this attack does not always work, it works most of the time.
 We not only reveal the stack canary but also the saved frame pointer which gives us information about stack addresses and the return address which gives us information about where the executable is loaded into memory.
+
+### Leaking the Global Offset Table and determining libc base address
+
+As soon as we retrieved stack canary, saved frame pointer and return address (for returning from `echo`), we can determine the base address at which the executable is loaded into memory.
+As we have access to the `echoserver` binary, we can disassemble it (`objdump -d echoserver` or also with `r2 echoserver`, if radare2 is preferred) and determine the offset of the instruction to which the `echo` function returns.
+When subtracting this offset from the leaked return instrution pointer, we thus get the executable's base address in memory.
+
+We can also determine the offset of the global offset table (GOT) in the executable.
+The next steps are then as follows:
+
+1. Output GOT entries over the socket to the client
+2. Determine libc address of a specified function (here: `write`)
+3. Determine libc offset of a specified function (here: `write`)
+4. From address and offset, calculate libc base address
+
+The first step is pretty easy thanks to how the executable is compiled.
+In order to output a GOT entry over the socket, we want to execute `write` with the necessary parameters.
+`write` expects the file descriptor to write to (here: our socket) in register `rdi`, the address of the buffer to write in `rsi` and the number of bytes to write in `rdx`.   
+This means that we have to find the socket file descriptor and somehow load it into `rdi`, load the address of a GOT entry into `rsi` and the number of bytes (preferably 8 bytes == 64 bits for the address) into `rdx`.
+As we so far only have the base address of the executable, we could build a ROP chain that does exactly what we want just with instructions from the executable.
+When analysing the executable (e.g. with `objdump` or `ropper`), however, we see that we could easily pop information from the stack into `rdi` but not easily move information from other registers into `rdi`.
+We would also have to find the right value on the stack at first, as we cannot determine the file descriptor beforehand and thus put it on the stack manually.
+Luckily, `echo` also loads the file descriptor into `rdi` in order to write the user input back to the user (i.e. in order to echo the user input).
+As `rdi` is not overwritten before `echo` returns, we already have the right file descriptor in `rdi`.   
+The approach for `rdx` is similar.
+It is again not easily possible to find an instruction chain to modify `rdx` in the way we want.
+Again, luckily `rdx` is already filled and not overwritten in `echo` for the same `write` operation as `rdi` above.
+Here, `rdx` contains the number of bytes that was read from the socket beforehand (i.e. the length of the user input).
+Thus, we know that the value of `rdx` is somewhere between 256 (at least 256 bytes needed for a buffer overflow) and 1024 (maximum number of bytes specified in the `read` function call).
+The approach is then to not only leak one specified address but the whole start of the GOT and then extract the gathered information from the GOT output.
+This allows to compare the libc addresses of different functions which might be necessary to determine the libc version (if not known) by finding identifying offset patterns between functions in libc.   
+Last but not least `rsi` has to be prepared with the address where we want to read from (i.e. the GOT address).
+As described above, we can determine this address with the help of the leaked base address of the executable.
+With a `pop rsi; pop r15; ret` instruction chain found in the executable, we can then just put this address onto the stack and pop it into `rsi`.
+
+The payload (as found in [poc.py](./Stack%20canary%20bypassing/poc.py#L56)) is then as follows:
+
+```python
+payload = b''
+payload += b'A' * 264       # Padding
+payload += canary           # Stack canary
+payload += sfp              # Saved frame pointer
+payload += poprsi_addr      # pop rsi; pop r15; ret address
+payload += got_addr         # GOT address to pop into rsi
+payload += p64(0x0)         # Junk to pop into r15
+payload += write_addr       # Write instruction to return to (destination file descriptor set in echo, number of bytes set in echo)
+```
+
+This code lets the executable return to the `pop rsi; pop r15; ret` instruction chain, pops the GOT address into `rsi` and then returns to the `write` function call in `main` which then outputs GOT contents to the client.
+
+It is then easy to find the libc address of a function (here: `write`) in the output, determine the offset in libc (e.g. with `readelf -s /lib/x86_64-linux-gnu/libc.so.6 | grep write`) and then calculate the libc base address from the function's address and its offset in libc.
+
+The base address at which libc is loaded into memory can then be used in further exploits as we then can call arbitrary functions from libc or also have way more instructions for building ROP chains at our hands.
+Thus, we can effectively not only bypass stack canaries but also ASLR if we manage to also leak the saved frame pointer and the return instruction pointer.
 
 ## Optimized compilation
 
