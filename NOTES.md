@@ -1401,7 +1401,7 @@ Last but not least `rsi` has to be prepared with the address where we want to re
 As described above, we can determine this address with the help of the leaked base address of the executable.
 With a `pop rsi; pop r15; ret` instruction chain found in the executable, we can then just put this address onto the stack and pop it into `rsi`.
 
-The payload (as found in [poc.py](./Stack%20canary%20bypassing/poc.py#L56)) is then as follows:
+The payload (as found in [poc.py](./Stack%20canary%20bypassing/poc.py#L62)) is then as follows:
 
 ```python
 payload = b''
