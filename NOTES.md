@@ -1421,6 +1421,56 @@ It is then easy to find the libc address of a function (here: `write`) in the ou
 The base address at which libc is loaded into memory can then be used in further exploits as we then can call arbitrary functions from libc or also have way more instructions for building ROP chains at our hands.
 Thus, we can effectively not only bypass stack canaries but also ASLR if we manage to also leak the saved frame pointer and the return instruction pointer.
 
+### Executing arbitrary code
+
+We basically already executed arbitrary code when [leaking the GOT](#leaking-the-global-offset-table-and-determining-libc-base-address).
+Because we could calculate the base address at which the executable was loaded, we were able to calculate addresses of instructions to return the data in the GOT over the network.   
+With that, we can also calculate the base address of libc which gives us a lot more opportunities to create an exploit.
+
+The easiest exploit is just to [spawn a shell](./Stack%20canary%20bypassing/poc.py#L79).
+This exploit just takes the address of a "/bin/sh" string found in libc and passes it to a call to `system()`.
+The necessary addresses can be easily calculated by the offsets found in the binaries (executable and libc) and the leaked base addresses.   
+Of course this exploit is not of great use, as it spawns the shell in the server process, i.e. the shell opens up on the server side with the client not being connected to it.
+Thus, only somebody having access to the server itself can input something onto the shell command line.
+
+A more sophisticated and useful attack is to bind a shell to a TCP port so that we can easily connect to the shell over the network (e.g. with `netcat`).
+This exploit has to be conducted in several steps:
+
+1. Create a socket
+2. Bind the socket to a port and listen for connections
+3. On incoming connections: redirect `stdin`, `stdout` and `stderr` to connection socket
+4. Replace current process with shell ("/bin/sh")
+
+The necessary functions (`socket`, `bind`, `dup2`, `execve`, etc.) can all be found in libc.
+This means that we only have to prepare the registers containing the arguments to those functions in the right way with the help of ROP gadgets (i.e. short assembly instruction chains ending in `ret`, found for example with `ropper -f /lib/x86_64-linux-gnu/libc.so.6`) and can then directly return to those functions.
+In the end, we basically didn't put shellcode onto the stack but only the addresses to parts of the shellcode which are executed so that a shell is bound to a TCP port.
+
+However, there are several problems with this kind of exploit:
+Firstly, the exploit is relying on the server not using any string functions (like e.g. `strcpy`, `fgets`, etc.) but only the `read` function which reads binary data.
+As the [exploit code](./Stack%20canary%20bypassing/poc.py#L111) contains a lot of `0x00` bytes, any string-based function would interpret such bytes as the end of the string and ignore any important data after such a byte.   
+Secondly, we here have a buffer of size 256 bytes that we overflow with a maximum of 1024 bytes (c.f. [echoserver.c, lines 14 and 19](./Stack%20canary%20bypassing/echoserver.c#L14)).
+If our ROP chain was even longer than it already is or the `read` function didn't read up to 1024 bytes but far less, we would not be able to put such huge amounts of data into the buffer and overflow it correctly.
+As we're putting lots of addresses onto the stack and each address is 64 bits (== 8 bytes), the payload for the exploit quickly becomes very big.
+Pure shellcode doing exactly what was described above [is in the range of around 100 bytes](https://www.exploit-db.com/shellcodes/46979), whereas the payload for this exploit is in the range of around 700 - 800 bytes.
+
+As already mentioned above, this exploit only works if the resulting payload is less than 1024 bytes long in this case.
+A possibility to work around this restriction is to not include the actual exploit code we want to execute in the end in the initial overflow payload but to let the overflow payload allocate memory, read from the network socket to this memory and then execute the content of that memory.
+The steps are then as follows:
+
+1. Allocate memory
+2. Mark allocated memory as executable
+3. Read shellcode from socket and write it to this memory
+4. Execute the shellcode
+
+The code for this exploit can be found in [poc.py](./Stack%20canary%20bypassing/poc.py#L199).
+
+As long as we allocate enough memory in the first place, our shellcode is basically not restricted in length.
+The original payload shrinks down from around 770 bytes to around 490 bytes.   
+Apart from the shorter payload and the basically unrestricted length of the shellcode, the other restrictions as explained above still apply.
+
+All in all, a single buffer overflow vulnerability in a server application can lead to arbitrary code execution.
+However, at least in our case, there are several prerequisites which make the exploit possible, namely binary operations instead of string operations (i.e. `read` and `write`), the distinguishability between a successful call to the server (returns "OK") and a crash, the huge amount of data to be read over the network for the initial overflow (1024 bytes), etc.
+
 ## Optimized compilation
 
 Similar to the previous sections, the results differ when compiling with compiler optimizations enabled via the `-O3` compiler flag.
