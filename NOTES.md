@@ -1313,23 +1313,23 @@ The following attacks are all targeting the `echoserver` executable already ment
 The idea based on the following stack layout (each row corresponds to 8 bytes):
 
 ```
-higher address |                             |
-               +-----------------------------+  ---+
-               | return address              |     |
-               +-----------------------------+     |
-               | saved frame pointer         |     |
-               +-----------------------------+     |
-               | stack canary                |     |
-               +-----------------------------+     |
-               | n                           |     +--- stack frame of echo
-               +-----------------------------+     |
-               | buffer[255 - 248]           |     |
-               | buffer[247 - 240]           |     |
-               |            ...              |     |
-               | buffer[15 - 8]              |     |
-               | buffer[7 - 0]               |     |
-               +-----------------------------+  ---+
-lower address  |                             |
+higher address  |                             |
+                +-----------------------------+  ---+
+                | return address              |     |
+                +-----------------------------+     |
+                | saved frame pointer         |     |
+                +-----------------------------+     |
+                | stack canary                |     |
+                +-----------------------------+     |
+                | n                           |     +--- stack frame of echo
+                +-----------------------------+     |
+                | buffer[255 - 248]           |     |
+                | buffer[247 - 240]           |     |
+                |            ...              |     |
+                | buffer[15 - 8]              |     |
+                | buffer[7 - 0]               |     |
+                +-----------------------------+  ---+
+lower address   |                             |
 ```
 
 We could then try to leak the stack canary with the known approach.
@@ -1501,3 +1501,83 @@ Thus, it is not possible to leak the stack canary with such measures enabled.
 
 If adding the `-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0` compiler flags, such checks are disabled and the stack canary can be leaked in exactly the same way as it was the case for the non-optimized version of the `echoserver` executable.
 Even though some optimizations are made (e.g. keeping the `int fd` argument to the `echo` function and the `ssize_t n` variable only in registers instead of putting them on the stack) and the stack layout thus may differ, no inlining or otherwise destructive (destructive concerning the success of the exploit) optimizations are made by the compiler.
+
+### Extended brute force leaking
+
+As the exploits for [leaking the return address](#leaking-saved-frame-pointer-and-return-instruction-pointer-return-address) (brute force guessing by stack buffer overflow) and [leaking the GOT](#leaking-the-global-offset-table-and-determining-libc-base-address) in order to bypass ASLR as well as the exploits for [code execution](#executing-arbitrary-code) based on those leaks all need to overflow the vulnerable stack buffer, they are subject to the `_FORTIFY_SOURCE` protection mechanism as described in the [previous section](#brute-force-leaking-1) just like the brute force attempt for leaking the stack canary.
+This means that simply activating compiler optimizations already prevents a malicious client of overflowing the buffer in the server and thus leak stack information and finally gain control over the control flow.
+
+The exploit thus is still able to run a DoS (Denial of Service) attack against the server by crashing it but cannot influence control flow.
+Even the DoS attack does not have any significant impact, as it is only targeted on a child process of the main server process and thus only crashes the child process so that future connections to the main process are still possible.
+
+With the `-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0` compiler flags set, the exploits work just like they did before with some smaller adjustments to offsets, addresses and padding lengths.
+This is due to the different structure of the executable and the stack when running the executable.
+
+For example, in the non-optimized executable we had the following stack layout in the `echo` function:
+
+```
+higher address  |                             |
+                +-----------------------------+  ---+
+                | return address              |     |
+                +-----------------------------+     |
+                | saved frame pointer         |     |
+                +-----------------------------+     |
+                | stack canary                |     |
+                +-----------------------------+     |
+                | n                           |     +--- stack frame of echo
+                +-----------------------------+     |
+                | buffer[255 - 248]           |     |
+                | buffer[247 - 240]           |     |
+                |            ...              |     |
+                | buffer[15 - 8]              |     |
+                | buffer[7 - 0]               |     |
+                +-----------------------------+  ---+
+lower address   |                             |
+```
+
+The stack layout for the optimized executable looks a little bit different:
+
+```
+higher address  |                             |
+                +-----------------------------+  ---+
+                | return address              |     |
+                +-----------------------------+     |
+                | saved r12 contents (junk)   |     |
+                +-----------------------------+     |
+                | saved ebp contents (socket) |     |
+                +-----------------------------+     |
+                | unreferenced junk           |     |
+                +-----------------------------+     |
+                | stack canary                |     +--- stack frame of echo
+                +-----------------------------+     |
+                | unreferenced junk           |     |
+                +-----------------------------+     |
+                | buffer[255 - 248]           |     |
+                | buffer[247 - 240]           |     |
+                |            ...              |     |
+                | buffer[15 - 8]              |     |
+                | buffer[7 - 0]               |     |
+                +-----------------------------+  ---+
+lower address   |                             |
+```
+
+In both cases, each line refers to 8 bytes.
+An interesting observation is that the stack frame of the `echoserver` executable compiled with compiler optimizations enabled has 8 bytes of unused space twice.
+The first one between the saved registers and the stack canary is caused by decrementing `rsp` by `0x118` and writing the stack canary to `rsp + 0x108`.
+The second one is caused by the buffer being located at position `rsp` (after decrementing the stack pointer of course) and thus occupying the space up to and including `rsp + 0xff` (i.e. 256 bytes) whereas the next important object (the stack canary) is located at `rsp + 0x108`.
+This is probably due to stack alignment requirements.
+
+Those changes in the stack layout make it necessary to account for the additional stack space (the space for the saved `r12` register as well as the unreferenced stack space) when padding the string to overflow the buffer and overwrite the canary and the return address.
+Additionally, offsets based on the `echoserver` executable have to be changed, as the binary's structure of course is different when compiled with the `-O3` flag.
+Fortunately, those are just smaller changes (reflected in the [poc_optimized.py](./Stack%20canary%20bypassing/poc_optimized.py) Python script), as the main parts of the exploit are based on assembly instructions taken from libc.
+As the linked libc doesn't change, the offsets for those instructions also stay the same.
+
+An important change is concerning the return address leaking.
+As the Procedure Linkage Table (PLT) in the optimized executable is located directly before the `main` function and the offsets are so that when brute forcing the last byte of the return address the `echo` function returns to the PLT entry of `fork` over and over again, it is not possibly to leak the return address without creating a lot of child processes which quickly fill up the memory.   
+To prevent this problem from occurring, it is necessary to fix the last return address byte in the exploit script in order to not have this problematic offset when returning from `echo`.
+As the last address byte always stays the same (independent of ASLR, as the last byte is not randomized), we do not weaken the ASLR bypassing functionality with this measure.
+In fact, for all of the exploits we assumed having access to the executable binary file in order to analyze it (to find the right stack offsets as well as useful assembly instructions to return to).
+Under this assumption, we could of course also easily determine the last return address byte from the executable which is why this measure does not impose any additional prerequisites on the exploits to work.
+
+All in all, the provided exploits for leaking addresses, thus bypassing ASLR and therefore fully controlling the execution flow are basically worthless without setting the `-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0` compiler flags.
+With those flags set, there is basically not much of a difference for the exploit complexity whether the executable is compiled with optimizations enabled or not.

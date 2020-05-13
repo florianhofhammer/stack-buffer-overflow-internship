@@ -12,6 +12,7 @@
 
 void echo(int fd) {
     char buffer[256];
+    // Output stack information to check exploit correctness (does only work when compiled without compiler optimizations!)
     uint64_t *canary = (uint64_t *)buffer + 33;
     fprintf(stderr, "Stack canary (little endian): 0x%.16lx\nSaved frame pointer (little endian): 0x%.16lx\nReturn address (little endian): 0x%.16lx\n", *canary, *(canary + 1), *(canary + 2));
     ssize_t n;
