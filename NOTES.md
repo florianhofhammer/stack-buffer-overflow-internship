@@ -2,7 +2,7 @@
 pagetitle:  Notes for the Stack Buffer Overflow internship at INRIA Sophia
 title:      Notes for the Stack Buffer Overflow internship at INRIA Sophia
 author:     Florian Hofhammer
-date:       2020-05-07
+date:       2020-05-14
 ---
 
 # Virtual Machine setup
@@ -1310,30 +1310,39 @@ The following attacks are all targeting the `echoserver` executable already ment
 
 ### Leaking saved frame pointer and return instruction pointer / return address
 
-The idea based on the following stack layout (each row corresponds to 8 bytes):
+The idea based on the following stack layout extracted by analyzing the binary (each row corresponds to 8 bytes):
 
 ```
-higher address  |                             |
-                +-----------------------------+  ---+
-                | return address              |     |
-                +-----------------------------+     |
-                | saved frame pointer         |     |
-                +-----------------------------+     |
-                | stack canary                |     |
-                +-----------------------------+     |
-                | n                           |     +--- stack frame of echo
-                +-----------------------------+     |
-                | buffer[255 - 248]           |     |
-                | buffer[247 - 240]           |     |
-                |            ...              |     |
-                | buffer[15 - 8]              |     |
-                | buffer[7 - 0]               |     |
-                +-----------------------------+  ---+
-lower address   |                             |
+higher address  |                                   |
+                +-----------------------------------+  ---+
+                | return address                    |     |
+                +-----------------------------------+     |
+                | saved frame pointer               |     |
+                +-----------------------------------+     |
+                | stack canary                      |     |
+                +-----------------------------------+     |
+                | unreferenced junk                 |     |
+                +-----------------------------------+     |
+                | char buffer[255 - 248]            |     |
+                | char buffer[247 - 240]            |     +--- stack frame of echo
+                |            ...                    |     |
+                | char buffer[15 - 8]               |     |
+                | char buffer[7 - 0]                |     |
+                +-----------------------------------+     |
+                | ssize_t n                         |     |
+                +-----------------------------------+     |
+                | uint64_t *canary                  |     |
+                +-----------------+-----------------+     |
+                | copy of int fd  |       junk      |     |
+                +-----------------+-----------------+  ---+
+lower address   |                                   |
 ```
+
+There is a total of 12 bytes (8 bytes between buffer and stack canary, 4 bytes after the copy of the file descriptor corresponding to the socket provided as argument to `echo`) of unused memory that is never referenced in the whole function.
+This is probably due to stack alignment requirements.
 
 We could then try to leak the stack canary with the known approach.
-After we know the stack canary, we could simply append it to the padding (used to overwrite `buffer` and `n`) and try the same approach for the saved frame pointer and later again for the return address.
+After we know the stack canary, we could simply append it to the padding (used to overwrite `buffer` and the unused 8 bytes) and try the same approach for the saved frame pointer and later again for the return address.
 
 If we manage to leak the saved frame pointer with this approach, we can determine stack addresses by analyzing the stack layout or determining offsets and with the help of some offsets the stack base address.   
 If we manage to leak the return address with this approach, we can determine the base address where the ELF executable is loaded into memory, as we know the offset of the original return address from the base address (determined via `objdump -d echoserver` from the position independent executable).
@@ -1354,9 +1363,9 @@ For example, if we overwrite the return address in such a way that the program r
 The other way round, the server could return to valid code and continue working just fine (e.g. by returning into `main` so that only exactly the sending of the success message is skipped) but the client would assume that an error occured because no success message was received.
 
 Those examples show that concerning the saved frame pointer and the return address, the brute force script might not be able to really distinguish between a crashed server because of incorrect values or a only seemingly crashed server.
-Because of that, those values cannot be determined reliably and other approaches have to be evaluated.
+Because of that, those values cannot be determined reliably and other approaches should be evaluated.
 
-An interesting observation is that this approach seems to work if a short delay between requests to the server is introduced.
+An interesting observation is that this approach seems to work more reliably if a short delay between requests to the server is introduced.
 Without any delay, `echoserver` processes are spawned so quickly on the server that the main memory runs full as those processes have to wait for TCP connections to close (TIME_WAIT) and they thus cannot exit immediately after having finished the main work.   
 With a delay introduced, the server isn't hit with requests as hard and thus the memory does not fill up completely as fast.
 This seems to make the approach described in this section much more reliable.
@@ -1370,7 +1379,7 @@ We not only reveal the stack canary but also the saved frame pointer which gives
 ### Leaking the Global Offset Table and determining libc base address
 
 As soon as we retrieved stack canary, saved frame pointer and return address (for returning from `echo`), we can determine the base address at which the executable is loaded into memory.
-As we have access to the `echoserver` binary, we can disassemble it (`objdump -d echoserver` or also with `r2 echoserver`, if radare2 is preferred) and determine the offset of the instruction to which the `echo` function returns.
+As we have access to the `echoserver` binary, we can disassemble it (`objdump -d echoserver` or also with `r2 echoserver`, if radare2 is preferred; other tools are of course also possible) and determine the offset of the instruction to which the `echo` function returns.
 When subtracting this offset from the leaked return instrution pointer, we thus get the executable's base address in memory.
 
 We can also determine the offset of the global offset table (GOT) in the executable.
@@ -1385,12 +1394,12 @@ The first step is pretty easy thanks to how the executable is compiled.
 In order to output a GOT entry over the socket, we want to execute `write` with the necessary parameters.
 `write` expects the file descriptor to write to (here: our socket) in register `rdi`, the address of the buffer to write in `rsi` and the number of bytes to write in `rdx`.   
 This means that we have to find the socket file descriptor and somehow load it into `rdi`, load the address of a GOT entry into `rsi` and the number of bytes (preferably 8 bytes == 64 bits for the address) into `rdx`.
-As we so far only have the base address of the executable, we could build a ROP chain that does exactly what we want just with instructions from the executable.
-When analysing the executable (e.g. with `objdump` or `ropper`), however, we see that we could easily pop information from the stack into `rdi` but not easily move information from other registers into `rdi`.
+As we so far only have the base address of the executable, we could try to build a ROP chain that does exactly what we want just with instructions from the executable.
+When analysing the executable (e.g. with `objdump` or `ropper`), however, we see that we could easily pop information from the stack into `rdi` (i.e. the file descriptor / socket) but not easily move information from other registers into `rdi`.
 We would also have to find the right value on the stack at first, as we cannot determine the file descriptor beforehand and thus put it on the stack manually.
 Luckily, `echo` also loads the file descriptor into `rdi` in order to write the user input back to the user (i.e. in order to echo the user input).
 As `rdi` is not overwritten before `echo` returns, we already have the right file descriptor in `rdi`.   
-The approach for `rdx` is similar.
+The approach for `rdx` (i.e. the number of bytes to write) is similar.
 It is again not easily possible to find an instruction chain to modify `rdx` in the way we want.
 Again, luckily `rdx` is already filled and not overwritten in `echo` for the same `write` operation as `rdi` above.
 Here, `rdx` contains the number of bytes that was read from the socket beforehand (i.e. the length of the user input).
@@ -1516,53 +1525,59 @@ This is due to the different structure of the executable and the stack when runn
 For example, in the non-optimized executable we had the following stack layout in the `echo` function:
 
 ```
-higher address  |                             |
-                +-----------------------------+  ---+
-                | return address              |     |
-                +-----------------------------+     |
-                | saved frame pointer         |     |
-                +-----------------------------+     |
-                | stack canary                |     |
-                +-----------------------------+     |
-                | n                           |     +--- stack frame of echo
-                +-----------------------------+     |
-                | buffer[255 - 248]           |     |
-                | buffer[247 - 240]           |     |
-                |            ...              |     |
-                | buffer[15 - 8]              |     |
-                | buffer[7 - 0]               |     |
-                +-----------------------------+  ---+
-lower address   |                             |
+higher address  |                                   |
+                +-----------------------------------+  ---+
+                | return address                    |     |
+                +-----------------------------------+     |
+                | saved frame pointer               |     |
+                +-----------------------------------+     |
+                | stack canary                      |     |
+                +-----------------------------------+     |
+                | unreferenced junk                 |     |
+                +-----------------------------------+     |
+                | char buffer[255 - 248]            |     |
+                | char buffer[247 - 240]            |     +--- stack frame of echo
+                |            ...                    |     |
+                | char buffer[15 - 8]               |     |
+                | char buffer[7 - 0]                |     |
+                +-----------------------------------+     |
+                | ssize_t n                         |     |
+                +-----------------------------------+     |
+                | uint64_t *canary                  |     |
+                +-----------------+-----------------+     |
+                | copy of int fd  |       junk      |     |
+                +-----------------+-----------------+  ---+
+lower address   |                                   |
 ```
 
 The stack layout for the optimized executable looks a little bit different:
 
 ```
-higher address  |                             |
-                +-----------------------------+  ---+
-                | return address              |     |
-                +-----------------------------+     |
-                | saved r12 contents (junk)   |     |
-                +-----------------------------+     |
-                | saved ebp contents (socket) |     |
-                +-----------------------------+     |
-                | unreferenced junk           |     |
-                +-----------------------------+     |
-                | stack canary                |     +--- stack frame of echo
-                +-----------------------------+     |
-                | unreferenced junk           |     |
-                +-----------------------------+     |
-                | buffer[255 - 248]           |     |
-                | buffer[247 - 240]           |     |
-                |            ...              |     |
-                | buffer[15 - 8]              |     |
-                | buffer[7 - 0]               |     |
-                +-----------------------------+  ---+
-lower address   |                             |
+higher address  |                                   |
+                +-----------------------------------+  ---+
+                | return address                    |     |
+                +-----------------------------------+     |
+                | saved r12 contents (junk)         |     |
+                +-----------------------------------+     |
+                | saved ebp contents (socket)       |     |
+                +-----------------------------------+     |
+                | unreferenced junk                 |     |
+                +-----------------------------------+     |
+                | stack canary                      |     +--- stack frame of echo
+                +-----------------------------------+     |
+                | unreferenced junk                 |     |
+                +-----------------------------------+     |
+                | char buffer[255 - 248]            |     |
+                | char buffer[247 - 240]            |     |
+                |            ...                    |     |
+                | char buffer[15 - 8]               |     |
+                | char buffer[7 - 0]                |     |
+                +-----------------------------------+  ---+
+lower address   |                                   |
 ```
 
 In both cases, each line refers to 8 bytes.
-An interesting observation is that the stack frame of the `echoserver` executable compiled with compiler optimizations enabled has 8 bytes of unused space twice.
+The stack frame of the `echoserver` executable compiled with compiler optimizations enabled has 8 bytes of unused space twice whereas the executable compiled without compiler optimizations allocates a total of 12 bytes of unused space on the stack in the `echo` function.
 The first one between the saved registers and the stack canary is caused by decrementing `rsp` by `0x118` and writing the stack canary to `rsp + 0x108`.
 The second one is caused by the buffer being located at position `rsp` (after decrementing the stack pointer of course) and thus occupying the space up to and including `rsp + 0xff` (i.e. 256 bytes) whereas the next important object (the stack canary) is located at `rsp + 0x108`.
 This is probably due to stack alignment requirements.

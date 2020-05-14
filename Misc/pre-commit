@@ -4,7 +4,7 @@
 PANDOC_FLAGS="--standalone --self-contained --fail-if-warnings --toc --toc-depth=2 --template=./Misc/GitHub.html5"
 
 # Notes
-pandoc $PANDOC_FLAGS ./NOTES.md -o  ./NOTES.html || exit $?
+pandoc $PANDOC_FLAGS ./NOTES.md -o ./NOTES.html || exit $?
 git add ./NOTES.html
 # Readmes
 pandoc $PANDOC_FLAGS ./README.md -o ./README.html || exit $?

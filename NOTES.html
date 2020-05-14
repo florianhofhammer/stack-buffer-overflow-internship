@@ -53,7 +53,7 @@ SOFTWARE.
   <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
   <meta name="author" content="Florian Hofhammer" />
-  <meta name="dcterms.date" content="2020-05-07" />
+  <meta name="dcterms.date" content="2020-05-14" />
   <title>Notes for the Stack Buffer Overflow internship at INRIA Sophia</title>
   <style type="text/css">
 @charset "UTF-8";.markdown-body{text-align:justify;-ms-text-size-adjust:100%;-webkit-text-size-adjust:100%;color:#24292e;font-family:-apple-system,system-ui,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif,"Apple Color Emoji","Segoe UI Emoji","Segoe UI Symbol";font-size:16px;line-height:1.5;word-wrap:break-word;box-sizing:border-box;min-width:200px;max-width:980px;margin:0 auto;padding:45px}.markdown-body a{color:#0366d6;background-color:transparent;text-decoration:none;-webkit-text-decoration-skip:objects}.markdown-body a:active,.markdown-body a:hover{outline-width:0}.markdown-body a:hover{text-decoration:underline}.markdown-body a:not([href]){color:inherit;text-decoration:none}.markdown-body strong{font-weight:600}.markdown-body h1,.markdown-body h2,.markdown-body h3,.markdown-body h4,.markdown-body h5,.markdown-body h6{margin-top:24px;margin-bottom:16px;font-weight:600;line-height:1.25}.markdown-body h1{font-size:2em;margin:.67em 0;padding-bottom:.3em;border-bottom:1px solid #eaecef}.markdown-body h2{padding-bottom:.3em;font-size:1.5em;border-bottom:1px solid #eaecef}.markdown-body h3{font-size:1.25em}.markdown-body h4{font-size:1em}.markdown-body h5{font-size:.875em}.markdown-body h6{font-size:.85em;color:#6a737d}.markdown-body img{border-style:none}.markdown-body svg:not(:root){overflow:hidden}.markdown-body hr{box-sizing:content-box;height:.25em;margin:24px 0;padding:0;overflow:hidden;background-color:#e1e4e8;border:0}.markdown-body hr::before{display:table;content:""}.markdown-body hr::after{display:table;clear:both;content:""}.markdown-body input{margin:0;overflow:visible;font:inherit;font-family:inherit;font-size:inherit;line-height:inherit}.markdown-body [type=checkbox]{box-sizing:border-box;padding:0}.markdown-body *{box-sizing:border-box}.markdown-body blockquote{margin:0}.markdown-body ol,.markdown-body ul{padding-left:2em}.markdown-body ol ol,.markdown-body ul ol{list-style-type:lower-roman}.markdown-body ol ol,.markdown-body ol ul,.markdown-body ul ol,.markdown-body ul ul{margin-top:0;margin-bottom:0}.markdown-body ol ol ol,.markdown-body ol ul ol,.markdown-body ul ol ol,.markdown-body ul ul ol{list-style-type:lower-alpha}.markdown-body li>p{margin-top:16px}.markdown-body li+li{margin-top:.25em}.markdown-body dd{margin-left:0}.markdown-body dl{padding:0}.markdown-body dl dt{padding:0;margin-top:16px;font-size:1em;font-style:italic;font-weight:600}.markdown-body dl dd{padding:0 16px;margin-bottom:16px}.markdown-body code{font-family:SFMono-Regular,Consolas,"Liberation Mono",Menlo,Courier,monospace}.markdown-body pre{font:12px SFMono-Regular,Consolas,"Liberation Mono",Menlo,Courier,monospace;word-wrap:normal}.markdown-body blockquote,.markdown-body dl,.markdown-body ol,.markdown-body p,.markdown-body pre,.markdown-body table,.markdown-body ul{margin-top:0;margin-bottom:16px}.markdown-body blockquote{padding:0 1em;color:#6a737d;border-left:.25em solid #dfe2e5}.markdown-body blockquote>:first-child{margin-top:0}.markdown-body blockquote>:last-child{margin-bottom:0}.markdown-body table{display:block;width:100%;overflow:auto;border-spacing:0;border-collapse:collapse}.markdown-body table th{font-weight:600}.markdown-body table td,.markdown-body table th{padding:6px 13px;border:1px solid #dfe2e5}.markdown-body table tr{background-color:#fff;border-top:1px solid #c6cbd1}.markdown-body table tr:nth-child(2n){background-color:#f6f8fa}.markdown-body img{max-width:100%;box-sizing:content-box;background-color:#fff}.markdown-body code{padding:.2em 0;margin:0;font-size:85%;background-color:rgba(27,31,35,.05);border-radius:3px}.markdown-body code::after,.markdown-body code::before{letter-spacing:-.2em;content:" "}.markdown-body pre>code{padding:0;margin:0;font-size:100%;word-break:normal;white-space:pre;background:0 0;border:0}.markdown-body .highlight{margin-bottom:16px}.markdown-body .highlight pre{margin-bottom:0;word-break:normal}.markdown-body .highlight pre,.markdown-body pre{padding:16px;overflow:auto;font-size:85%;line-height:1.45;background-color:#f6f8fa;border-radius:3px}.markdown-body pre code{display:inline;max-width:auto;padding:0;margin:0;overflow:visible;line-height:inherit;word-wrap:normal;background-color:transparent;border:0}.markdown-body pre code::after,.markdown-body pre code::before{content:normal}.markdown-body .full-commit .btn-outline:not(:disabled):hover{color:#005cc5;border-color:#005cc5}.markdown-body kbd{box-shadow:inset 0 -1px 0 #959da5;display:inline-block;padding:3px 5px;font:11px/10px SFMono-Regular,Consolas,"Liberation Mono",Menlo,Courier,monospace;color:#444d56;vertical-align:middle;background-color:#fcfcfc;border:1px solid #c6cbd1;border-bottom-color:#959da5;border-radius:3px;box-shadow:inset 0 -1px 0 #959da5}.markdown-body :checked+.radio-label{position:relative;z-index:1;border-color:#0366d6}.markdown-body .task-list-item{list-style-type:none}.markdown-body .task-list-item+.task-list-item{margin-top:3px}.markdown-body .task-list-item input{margin:0 .2em .25em -1.6em;vertical-align:middle}.markdown-body::before{display:table;content:""}.markdown-body::after{display:table;clear:both;content:""}.markdown-body>:first-child{margin-top:0!important}.markdown-body>:last-child{margin-bottom:0!important}.Alert,.Error,.Note,.Success,.Warning{padding:11px;margin-bottom:24px;border-style:solid;border-width:1px;border-radius:4px}.Alert p,.Error p,.Note p,.Success p,.Warning p{margin-top:0}.Alert p:last-child,.Error p:last-child,.Note p:last-child,.Success p:last-child,.Warning p:last-child{margin-bottom:0}.Alert{color:#246;background-color:#e2eef9;border-color:#bac6d3}.Warning{color:#4c4a42;background-color:#fff9ea;border-color:#dfd8c2}.Error{color:#911;background-color:#fcdede;border-color:#d2b2b2}.Success{color:#22662c;background-color:#e2f9e5;border-color:#bad3be}.Note{color:#2f363d;background-color:#f6f8fa;border-color:#d5d8da}.Alert h1,.Alert h2,.Alert h3,.Alert h4,.Alert h5,.Alert h6{color:#246;margin-bottom:0}.Warning h1,.Warning h2,.Warning h3,.Warning h4,.Warning h5,.Warning h6{color:#4c4a42;margin-bottom:0}.Error h1,.Error h2,.Error h3,.Error h4,.Error h5,.Error h6{color:#911;margin-bottom:0}.Success h1,.Success h2,.Success h3,.Success h4,.Success h5,.Success h6{color:#22662c;margin-bottom:0}.Note h1,.Note h2,.Note h3,.Note h4,.Note h5,.Note h6{color:#2f363d;margin-bottom:0}.Alert h1:first-child,.Alert h2:first-child,.Alert h3:first-child,.Alert h4:first-child,.Alert h5:first-child,.Alert h6:first-child,.Error h1:first-child,.Error h2:first-child,.Error h3:first-child,.Error h4:first-child,.Error h5:first-child,.Error h6:first-child,.Note h1:first-child,.Note h2:first-child,.Note h3:first-child,.Note h4:first-child,.Note h5:first-child,.Note h6:first-child,.Success h1:first-child,.Success h2:first-child,.Success h3:first-child,.Success h4:first-child,.Success h5:first-child,.Success h6:first-child,.Warning h1:first-child,.Warning h2:first-child,.Warning h3:first-child,.Warning h4:first-child,.Warning h5:first-child,.Warning h6:first-child{margin-top:0}h1.title,p.subtitle{text-align:center}h1.title.followed-by-subtitle{margin-bottom:0}p.subtitle{font-size:1.5em;font-weight:600;line-height:1.25;margin-top:0;margin-bottom:16px;padding-bottom:.3em}div.line-block{white-space:pre-line}
@@ -131,7 +131,7 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <header>
 <h1 class="title">Notes for the Stack Buffer Overflow internship at INRIA Sophia</h1>
 <p class="author">Florian Hofhammer</p>
-<p class="date">2020-05-07</p>
+<p class="date">2020-05-14</p>
 </header>
 <hr>
 <nav id="TOC">
@@ -763,38 +763,45 @@ The child process in the meantime reads into a buffer. However, the maximum numb
 <p>An interesting approach is then to extend this idea in order to not only gather information about the address space of the executable in order to bypass the restrictions imposed by ASLR.</p>
 <p>The following attacks are all targeting the <code>echoserver</code> executable already mentioned in the <a href="#brute-force-leaking">previous section</a>.</p>
 <h3 id="leaking-saved-frame-pointer-and-return-instruction-pointer-return-address">Leaking saved frame pointer and return instruction pointer / return address</h3>
-<p>The idea based on the following stack layout (each row corresponds to 8 bytes):</p>
-<pre><code>higher address  |                             |
-                +-----------------------------+  ---+
-                | return address              |     |
-                +-----------------------------+     |
-                | saved frame pointer         |     |
-                +-----------------------------+     |
-                | stack canary                |     |
-                +-----------------------------+     |
-                | n                           |     +--- stack frame of echo
-                +-----------------------------+     |
-                | buffer[255 - 248]           |     |
-                | buffer[247 - 240]           |     |
-                |            ...              |     |
-                | buffer[15 - 8]              |     |
-                | buffer[7 - 0]               |     |
-                +-----------------------------+  ---+
-lower address   |                             |</code></pre>
-<p>We could then try to leak the stack canary with the known approach. After we know the stack canary, we could simply append it to the padding (used to overwrite <code>buffer</code> and <code>n</code>) and try the same approach for the saved frame pointer and later again for the return address.</p>
+<p>The idea based on the following stack layout extracted by analyzing the binary (each row corresponds to 8 bytes):</p>
+<pre><code>higher address  |                                   |
+                +-----------------------------------+  ---+
+                | return address                    |     |
+                +-----------------------------------+     |
+                | saved frame pointer               |     |
+                +-----------------------------------+     |
+                | stack canary                      |     |
+                +-----------------------------------+     |
+                | unreferenced junk                 |     |
+                +-----------------------------------+     |
+                | char buffer[255 - 248]            |     |
+                | char buffer[247 - 240]            |     +--- stack frame of echo
+                |            ...                    |     |
+                | char buffer[15 - 8]               |     |
+                | char buffer[7 - 0]                |     |
+                +-----------------------------------+     |
+                | ssize_t n                         |     |
+                +-----------------------------------+     |
+                | uint64_t *canary                  |     |
+                +-----------------+-----------------+     |
+                | copy of int fd  |       junk      |     |
+                +-----------------+-----------------+  ---+
+lower address   |                                   |</code></pre>
+<p>There is a total of 12 bytes (8 bytes between buffer and stack canary, 4 bytes after the copy of the file descriptor corresponding to the socket provided as argument to <code>echo</code>) of unused memory that is never referenced in the whole function. This is probably due to stack alignment requirements.</p>
+<p>We could then try to leak the stack canary with the known approach. After we know the stack canary, we could simply append it to the padding (used to overwrite <code>buffer</code> and the unused 8 bytes) and try the same approach for the saved frame pointer and later again for the return address.</p>
 <p>If we manage to leak the saved frame pointer with this approach, we can determine stack addresses by analyzing the stack layout or determining offsets and with the help of some offsets the stack base address.<br />
 If we manage to leak the return address with this approach, we can determine the base address where the ELF executable is loaded into memory, as we know the offset of the original return address from the base address (determined via <code>objdump -d echoserver</code> from the position independent executable).</p>
 <p>The former result could help us to manipulate specific stack contents, the latter result could allow us to create ROP chains making use of the code found in the executable. With such ROP chains, we could maybe even leak addresses saved in the global offset table and thus determine the base address where libc is loaded.</p>
 <p>As the server forks on each request, the memory layout is the same for each request and we can thus apply information gathered by one request on any following requests to the server.</p>
 <p>However, there is a problem with this idea: The brute force script (<a href="./Stack%20canary%20bypassing/poc.py">poc.py</a> Python script) relies on the server’s behavior concerning success messages (here: “OK” as success message). When we overwrite the stack canary with a wrong value, the server immediately aborts on trying to return from the <code>echo</code> function and thus never sends the success message. Thus, the client knows that the value was incorrect.<br />
 The behavior is a little bit different concerning the saved frame pointer or the return address. If we provide incorrect values for those, the server is likely to crash with a segmentation fault or an illegal instruction fault or some similar errors when trying to return from <code>echo</code>. However, it is just likely to crash, it does not crash necessarily. For example, if we overwrite the return address in such a way that the program returns to valid code (e.g. in <code>main</code>, right before the call to <code>echo</code>), the server could still return a success message and the client would assume that it found the correct value even if it is not the case. The other way round, the server could return to valid code and continue working just fine (e.g. by returning into <code>main</code> so that only exactly the sending of the success message is skipped) but the client would assume that an error occured because no success message was received.</p>
-<p>Those examples show that concerning the saved frame pointer and the return address, the brute force script might not be able to really distinguish between a crashed server because of incorrect values or a only seemingly crashed server. Because of that, those values cannot be determined reliably and other approaches have to be evaluated.</p>
-<p>An interesting observation is that this approach seems to work if a short delay between requests to the server is introduced. Without any delay, <code>echoserver</code> processes are spawned so quickly on the server that the main memory runs full as those processes have to wait for TCP connections to close (TIME_WAIT) and they thus cannot exit immediately after having finished the main work.<br />
+<p>Those examples show that concerning the saved frame pointer and the return address, the brute force script might not be able to really distinguish between a crashed server because of incorrect values or a only seemingly crashed server. Because of that, those values cannot be determined reliably and other approaches should be evaluated.</p>
+<p>An interesting observation is that this approach seems to work more reliably if a short delay between requests to the server is introduced. Without any delay, <code>echoserver</code> processes are spawned so quickly on the server that the main memory runs full as those processes have to wait for TCP connections to close (TIME_WAIT) and they thus cannot exit immediately after having finished the main work.<br />
 With a delay introduced, the server isn’t hit with requests as hard and thus the memory does not fill up completely as fast. This seems to make the approach described in this section much more reliable. The <code>poc.py</code> script can thus determine the stack canary, saved frame pointer and return address in most of the cases. Additional measures that increased the success reliability were to increase the memory of the virtual machine (4GiB =&gt; 8GiB) and wait between several runs until all TCP sessions are closed (open connections can be determined via <code>netstat -tupan</code>).<br />
 Those observations imply that errors from this exploit might be more related to memory/computational issues than to logical issues concerning the overwritten values.</p>
 <p>In conclusion, even though this attack does not always work, it works most of the time. We not only reveal the stack canary but also the saved frame pointer which gives us information about stack addresses and the return address which gives us information about where the executable is loaded into memory.</p>
 <h3 id="leaking-the-global-offset-table-and-determining-libc-base-address">Leaking the Global Offset Table and determining libc base address</h3>
-<p>As soon as we retrieved stack canary, saved frame pointer and return address (for returning from <code>echo</code>), we can determine the base address at which the executable is loaded into memory. As we have access to the <code>echoserver</code> binary, we can disassemble it (<code>objdump -d echoserver</code> or also with <code>r2 echoserver</code>, if radare2 is preferred) and determine the offset of the instruction to which the <code>echo</code> function returns. When subtracting this offset from the leaked return instrution pointer, we thus get the executable’s base address in memory.</p>
+<p>As soon as we retrieved stack canary, saved frame pointer and return address (for returning from <code>echo</code>), we can determine the base address at which the executable is loaded into memory. As we have access to the <code>echoserver</code> binary, we can disassemble it (<code>objdump -d echoserver</code> or also with <code>r2 echoserver</code>, if radare2 is preferred; other tools are of course also possible) and determine the offset of the instruction to which the <code>echo</code> function returns. When subtracting this offset from the leaked return instrution pointer, we thus get the executable’s base address in memory.</p>
 <p>We can also determine the offset of the global offset table (GOT) in the executable. The next steps are then as follows:</p>
 <ol type="1">
 <li>Output GOT entries over the socket to the client</li>
@@ -803,8 +810,8 @@ Those observations imply that errors from this exploit might be more related to 
 <li>From address and offset, calculate libc base address</li>
 </ol>
 <p>The first step is pretty easy thanks to how the executable is compiled. In order to output a GOT entry over the socket, we want to execute <code>write</code> with the necessary parameters. <code>write</code> expects the file descriptor to write to (here: our socket) in register <code>rdi</code>, the address of the buffer to write in <code>rsi</code> and the number of bytes to write in <code>rdx</code>.<br />
-This means that we have to find the socket file descriptor and somehow load it into <code>rdi</code>, load the address of a GOT entry into <code>rsi</code> and the number of bytes (preferably 8 bytes == 64 bits for the address) into <code>rdx</code>. As we so far only have the base address of the executable, we could build a ROP chain that does exactly what we want just with instructions from the executable. When analysing the executable (e.g. with <code>objdump</code> or <code>ropper</code>), however, we see that we could easily pop information from the stack into <code>rdi</code> but not easily move information from other registers into <code>rdi</code>. We would also have to find the right value on the stack at first, as we cannot determine the file descriptor beforehand and thus put it on the stack manually. Luckily, <code>echo</code> also loads the file descriptor into <code>rdi</code> in order to write the user input back to the user (i.e. in order to echo the user input). As <code>rdi</code> is not overwritten before <code>echo</code> returns, we already have the right file descriptor in <code>rdi</code>.<br />
-The approach for <code>rdx</code> is similar. It is again not easily possible to find an instruction chain to modify <code>rdx</code> in the way we want. Again, luckily <code>rdx</code> is already filled and not overwritten in <code>echo</code> for the same <code>write</code> operation as <code>rdi</code> above. Here, <code>rdx</code> contains the number of bytes that was read from the socket beforehand (i.e. the length of the user input). Thus, we know that the value of <code>rdx</code> is somewhere between 256 (at least 256 bytes needed for a buffer overflow) and 1024 (maximum number of bytes specified in the <code>read</code> function call). The approach is then to not only leak one specified address but the whole start of the GOT and then extract the gathered information from the GOT output. This allows to compare the libc addresses of different functions which might be necessary to determine the libc version (if not known) by finding identifying offset patterns between functions in libc.<br />
+This means that we have to find the socket file descriptor and somehow load it into <code>rdi</code>, load the address of a GOT entry into <code>rsi</code> and the number of bytes (preferably 8 bytes == 64 bits for the address) into <code>rdx</code>. As we so far only have the base address of the executable, we could try to build a ROP chain that does exactly what we want just with instructions from the executable. When analysing the executable (e.g. with <code>objdump</code> or <code>ropper</code>), however, we see that we could easily pop information from the stack into <code>rdi</code> (i.e. the file descriptor / socket) but not easily move information from other registers into <code>rdi</code>. We would also have to find the right value on the stack at first, as we cannot determine the file descriptor beforehand and thus put it on the stack manually. Luckily, <code>echo</code> also loads the file descriptor into <code>rdi</code> in order to write the user input back to the user (i.e. in order to echo the user input). As <code>rdi</code> is not overwritten before <code>echo</code> returns, we already have the right file descriptor in <code>rdi</code>.<br />
+The approach for <code>rdx</code> (i.e. the number of bytes to write) is similar. It is again not easily possible to find an instruction chain to modify <code>rdx</code> in the way we want. Again, luckily <code>rdx</code> is already filled and not overwritten in <code>echo</code> for the same <code>write</code> operation as <code>rdi</code> above. Here, <code>rdx</code> contains the number of bytes that was read from the socket beforehand (i.e. the length of the user input). Thus, we know that the value of <code>rdx</code> is somewhere between 256 (at least 256 bytes needed for a buffer overflow) and 1024 (maximum number of bytes specified in the <code>read</code> function call). The approach is then to not only leak one specified address but the whole start of the GOT and then extract the gathered information from the GOT output. This allows to compare the libc addresses of different functions which might be necessary to determine the libc version (if not known) by finding identifying offset patterns between functions in libc.<br />
 Last but not least <code>rsi</code> has to be prepared with the address where we want to read from (i.e. the GOT address). As described above, we can determine this address with the help of the leaked base address of the executable. With a <code>pop rsi; pop r15; ret</code> instruction chain found in the executable, we can then just put this address onto the stack and pop it into <code>rsi</code>.</p>
 <p>The payload (as found in <a href="./Stack%20canary%20bypassing/poc.py#L62">poc.py</a>) is then as follows:</p>
 <div class="sourceCode" id="cb30"><pre class="sourceCode python"><code class="sourceCode python"><a class="sourceLine" id="cb30-1" data-line-number="1">payload <span class="op">=</span> b<span class="st">''</span></a>
@@ -862,46 +869,52 @@ Apart from the shorter payload and the basically unrestricted length of the shel
 <p>The exploit thus is still able to run a DoS (Denial of Service) attack against the server by crashing it but cannot influence control flow. Even the DoS attack does not have any significant impact, as it is only targeted on a child process of the main server process and thus only crashes the child process so that future connections to the main process are still possible.</p>
 <p>With the <code>-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0</code> compiler flags set, the exploits work just like they did before with some smaller adjustments to offsets, addresses and padding lengths. This is due to the different structure of the executable and the stack when running the executable.</p>
 <p>For example, in the non-optimized executable we had the following stack layout in the <code>echo</code> function:</p>
-<pre><code>higher address  |                             |
-                +-----------------------------+  ---+
-                | return address              |     |
-                +-----------------------------+     |
-                | saved frame pointer         |     |
-                +-----------------------------+     |
-                | stack canary                |     |
-                +-----------------------------+     |
-                | n                           |     +--- stack frame of echo
-                +-----------------------------+     |
-                | buffer[255 - 248]           |     |
-                | buffer[247 - 240]           |     |
-                |            ...              |     |
-                | buffer[15 - 8]              |     |
-                | buffer[7 - 0]               |     |
-                +-----------------------------+  ---+
-lower address   |                             |</code></pre>
+<pre><code>higher address  |                                   |
+                +-----------------------------------+  ---+
+                | return address                    |     |
+                +-----------------------------------+     |
+                | saved frame pointer               |     |
+                +-----------------------------------+     |
+                | stack canary                      |     |
+                +-----------------------------------+     |
+                | unreferenced junk                 |     |
+                +-----------------------------------+     |
+                | char buffer[255 - 248]            |     |
+                | char buffer[247 - 240]            |     +--- stack frame of echo
+                |            ...                    |     |
+                | char buffer[15 - 8]               |     |
+                | char buffer[7 - 0]                |     |
+                +-----------------------------------+     |
+                | ssize_t n                         |     |
+                +-----------------------------------+     |
+                | uint64_t *canary                  |     |
+                +-----------------+-----------------+     |
+                | copy of int fd  |       junk      |     |
+                +-----------------+-----------------+  ---+
+lower address   |                                   |</code></pre>
 <p>The stack layout for the optimized executable looks a little bit different:</p>
-<pre><code>higher address  |                             |
-                +-----------------------------+  ---+
-                | return address              |     |
-                +-----------------------------+     |
-                | saved r12 contents (junk)   |     |
-                +-----------------------------+     |
-                | saved ebp contents (socket) |     |
-                +-----------------------------+     |
-                | unreferenced junk           |     |
-                +-----------------------------+     |
-                | stack canary                |     +--- stack frame of echo
-                +-----------------------------+     |
-                | unreferenced junk           |     |
-                +-----------------------------+     |
-                | buffer[255 - 248]           |     |
-                | buffer[247 - 240]           |     |
-                |            ...              |     |
-                | buffer[15 - 8]              |     |
-                | buffer[7 - 0]               |     |
-                +-----------------------------+  ---+
-lower address   |                             |</code></pre>
-<p>In both cases, each line refers to 8 bytes. An interesting observation is that the stack frame of the <code>echoserver</code> executable compiled with compiler optimizations enabled has 8 bytes of unused space twice. The first one between the saved registers and the stack canary is caused by decrementing <code>rsp</code> by <code>0x118</code> and writing the stack canary to <code>rsp + 0x108</code>. The second one is caused by the buffer being located at position <code>rsp</code> (after decrementing the stack pointer of course) and thus occupying the space up to and including <code>rsp + 0xff</code> (i.e. 256 bytes) whereas the next important object (the stack canary) is located at <code>rsp + 0x108</code>. This is probably due to stack alignment requirements.</p>
+<pre><code>higher address  |                                   |
+                +-----------------------------------+  ---+
+                | return address                    |     |
+                +-----------------------------------+     |
+                | saved r12 contents (junk)         |     |
+                +-----------------------------------+     |
+                | saved ebp contents (socket)       |     |
+                +-----------------------------------+     |
+                | unreferenced junk                 |     |
+                +-----------------------------------+     |
+                | stack canary                      |     +--- stack frame of echo
+                +-----------------------------------+     |
+                | unreferenced junk                 |     |
+                +-----------------------------------+     |
+                | char buffer[255 - 248]            |     |
+                | char buffer[247 - 240]            |     |
+                |            ...                    |     |
+                | char buffer[15 - 8]               |     |
+                | char buffer[7 - 0]                |     |
+                +-----------------------------------+  ---+
+lower address   |                                   |</code></pre>
+<p>In both cases, each line refers to 8 bytes. The stack frame of the <code>echoserver</code> executable compiled with compiler optimizations enabled has 8 bytes of unused space twice whereas the executable compiled without compiler optimizations allocates a total of 12 bytes of unused space on the stack in the <code>echo</code> function. The first one between the saved registers and the stack canary is caused by decrementing <code>rsp</code> by <code>0x118</code> and writing the stack canary to <code>rsp + 0x108</code>. The second one is caused by the buffer being located at position <code>rsp</code> (after decrementing the stack pointer of course) and thus occupying the space up to and including <code>rsp + 0xff</code> (i.e. 256 bytes) whereas the next important object (the stack canary) is located at <code>rsp + 0x108</code>. This is probably due to stack alignment requirements.</p>
 <p>Those changes in the stack layout make it necessary to account for the additional stack space (the space for the saved <code>r12</code> register as well as the unreferenced stack space) when padding the string to overflow the buffer and overwrite the canary and the return address. Additionally, offsets based on the <code>echoserver</code> executable have to be changed, as the binary’s structure of course is different when compiled with the <code>-O3</code> flag. Fortunately, those are just smaller changes (reflected in the <a href="./Stack%20canary%20bypassing/poc_optimized.py">poc_optimized.py</a> Python script), as the main parts of the exploit are based on assembly instructions taken from libc. As the linked libc doesn’t change, the offsets for those instructions also stay the same.</p>
 <p>An important change is concerning the return address leaking. As the Procedure Linkage Table (PLT) in the optimized executable is located directly before the <code>main</code> function and the offsets are so that when brute forcing the last byte of the return address the <code>echo</code> function returns to the PLT entry of <code>fork</code> over and over again, it is not possibly to leak the return address without creating a lot of child processes which quickly fill up the memory.<br />
 To prevent this problem from occurring, it is necessary to fix the last return address byte in the exploit script in order to not have this problematic offset when returning from <code>echo</code>. As the last address byte always stays the same (independent of ASLR, as the last byte is not randomized), we do not weaken the ASLR bypassing functionality with this measure. In fact, for all of the exploits we assumed having access to the executable binary file in order to analyze it (to find the right stack offsets as well as useful assembly instructions to return to). Under this assumption, we could of course also easily determine the last return address byte from the executable which is why this measure does not impose any additional prerequisites on the exploits to work.</p>
