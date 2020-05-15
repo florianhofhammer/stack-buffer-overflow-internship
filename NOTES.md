@@ -167,7 +167,7 @@ Additionally, appending the `-s` flag to the `eggshell` call uses a different sh
 With this addition, it is not only possible to spawn a shell at all, but also to spawn a shell with the executable's owner's privileges if the SUID bit on the executable is set.
 If the owner is set to `root` and the SUID bit is set (e.g. by executing `sudo chown root vulnerable && sudo chmod u+s vulnerable`), it is thus possible to spawn a root shell even when executing the exploit as a non-privileged user.
 
-## Optimized compilation
+## Optimizing compilation
 
 The results described in the previous sections were achieved without any compiler optimizations enabled.
 If compiling with the highest optimizations in GCC (i.e. the `-O3` flag), the results are a little bit different.
@@ -477,7 +477,7 @@ This was conducted using the Python `pwntools`.
 The [poc_local.py](./64bit%20Stack%20smashing%20-%20superkojiman/poc_local.py) contains the code for a local exploit.
 In addition to the original exploit, this variant also calls `setreuid` in order to achieve privilege escalation when a vulnerable executable with the SUID bit set is exploited.
 
-## Optimized compilation
+## Optimizing compilation
 
 As with the executables from the [Aleph1 exploits](#smashing-the-stack-for-fun-and-profit---aleph1), no compiler optimizations were activated during the compilation of the executables used for the three parts of the tutorial.
 With optimizations enabled (`-O3` flag), the exploits have to be conducted a little bit different, which is explained in the following.
@@ -940,7 +940,7 @@ Firstly, it is not possible to use the heap.
 We have to rely on an array in the `.bss` or `.data` section (c.f. [ret2bss](#ret2bss) and [ret2data](#ret2data)), i.e. a global array.   
 Secondly, we have to link the executable with RELRO disabled.
 
-## Optimized compilation
+## Optimizing compilation
 
 By default, no compiler optimizations were enabled during building all the executables (i.e. `-O0` compiler flag which is active by default in GCC).
 This section describes the differences that occur when recompiling the executables with the `-O3` compiler flag, i.e. GCC's highest optimization options enabled.
@@ -1480,7 +1480,7 @@ Apart from the shorter payload and the basically unrestricted length of the shel
 All in all, a single buffer overflow vulnerability in a server application can lead to arbitrary code execution.
 However, at least in our case, there are several prerequisites which make the exploit possible, namely binary operations instead of string operations (i.e. `read` and `write`), the distinguishability between a successful call to the server (returns "OK") and a crash, the huge amount of data to be read over the network for the initial overflow (1024 bytes), etc.
 
-## Optimized compilation
+## Optimizing compilation
 
 Similar to the previous sections, the results differ when compiling with compiler optimizations enabled via the `-O3` compiler flag.
 

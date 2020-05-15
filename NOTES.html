@@ -146,13 +146,13 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <li><a href="#example3.c">example3.c</a></li>
 <li><a href="#overflow1.c">overflow1.c</a></li>
 <li><a href="#vulnerable.c">vulnerable.c</a></li>
-<li><a href="#optimized-compilation">Optimized compilation</a></li>
+<li><a href="#optimizing-compilation">Optimizing compilation</a></li>
 </ul></li>
 <li><a href="#bit-linux-stack-smashing">64-bit Linux stack smashing</a><ul>
 <li><a href="#part-1">Part 1</a></li>
 <li><a href="#part-2">Part 2</a></li>
 <li><a href="#part-3">Part 3</a></li>
-<li><a href="#optimized-compilation-1">Optimized compilation</a></li>
+<li><a href="#optimizing-compilation-1">Optimizing compilation</a></li>
 </ul></li>
 <li><a href="#aslr-smack-and-laugh">ASLR Smack and Laugh</a><ul>
 <li><a href="#general-observations">General observations</a></li>
@@ -165,13 +165,13 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <li><a href="#got-hijacking---ret2got">GOT hijacking - ret2got</a></li>
 <li><a href="#off-by-one">Off by one</a></li>
 <li><a href="#overwriting-.dtors">Overwriting .dtors</a></li>
-<li><a href="#optimized-compilation-2">Optimized compilation</a></li>
+<li><a href="#optimizing-compilation-2">Optimizing compilation</a></li>
 </ul></li>
 <li><a href="#stack-canary-bypassing">Stack canary bypassing</a><ul>
 <li><a href="#stack-analysis---getcanary-and-getcanarythreaded">Stack analysis - <code>getCanary</code> and <code>getCanaryThreaded</code></a></li>
 <li><a href="#brute-force-leaking">Brute force leaking</a></li>
 <li><a href="#extended-brute-force-leaking">Extended brute force leaking</a></li>
-<li><a href="#optimized-compilation-3">Optimized compilation</a></li>
+<li><a href="#optimizing-compilation-3">Optimizing compilation</a></li>
 </ul></li>
 </ul>
 </nav>
@@ -238,7 +238,7 @@ As they are based on the GDB Python API and partly still use Python 2.7 (which b
 <p>Changing the comparison from <code>i &lt;= eggsize ...</code> to <code>i &lt; eggsize ...</code> fixes that problem, as one less NOP instruction is written to the egg buffer and thus the actual shellcode starts at a lower position in the buffer.</p>
 <p>Providing no offset as with <code>exploit4</code>, the address in <code>BOF</code> does not point to the <code>EGG</code> environment variable. Just like with <code>exploit3</code>, it is easy to find a fitting offset with a debugger by looking at the difference of the provided (incorrect) address and the address of the <code>EGG</code> variable (e.g. by issuing <code>search &quot;EGG&quot;</code> in <code>gdb</code> with the <code>pwndbg</code> plugin). Thus, calling e.g. <code>eggshell -b 600 -o -2000</code> lets us spawn a shell from the <code>vulnerable</code> executable.</p>
 <p>Additionally, appending the <code>-s</code> flag to the <code>eggshell</code> call uses a different shellcode which not only spawns a shell but also calls <code>setreuid(geteuid(), geteuid())</code> before. With this addition, it is not only possible to spawn a shell at all, but also to spawn a shell with the executable’s owner’s privileges if the SUID bit on the executable is set. If the owner is set to <code>root</code> and the SUID bit is set (e.g. by executing <code>sudo chown root vulnerable &amp;&amp; sudo chmod u+s vulnerable</code>), it is thus possible to spawn a root shell even when executing the exploit as a non-privileged user.</p>
-<h2 id="optimized-compilation">Optimized compilation</h2>
+<h2 id="optimizing-compilation">Optimizing compilation</h2>
 <p>The results described in the previous sections were achieved without any compiler optimizations enabled. If compiling with the highest optimizations in GCC (i.e. the <code>-O3</code> flag), the results are a little bit different.</p>
 <h3 id="example2.c">example2.c</h3>
 <p>If we look for example at <a href="./Smashing%20the%20stack%20-%20Aleph1/example2.c">example2.c</a>, we can immediately spot the vulnerability: In the function <code>function</code>, we copy the string the function receives into a 16 bytes buffer, no matter how big the string is. Without optimizations, this leads to a segmentation fault, as the given string (i.e. 255 * ‘A’) is way to big for the buffer and overflows the return address. With optimizations enabled, the function is completely inlined, i.e. the space for <code>buffer</code> is already allocated on the stack in the main function and instead of calling <code>function</code>, <code>main</code> just calls <code>strcpy</code> itself with the correct parameters, i.e. the addresses of <code>buffer</code> and <code>large_string</code>.<br />
@@ -420,7 +420,7 @@ The solution is as follows: the address provided in the tutorial to write the �
 </ol>
 <p>The final exploit code crafted from the addresses found in the executable (compiled/linked as non-PIE) and the aforementioned approaches to find offsets and addresses is located in the <a href="./64bit%20Stack%20smashing%20-%20superkojiman/poc.py">poc.py</a> Python script. It relies on the executable being available over the network as mentioned above.</p>
 <p>However, it is also possible to launch such an exploit locally. This was conducted using the Python <code>pwntools</code>. The <a href="./64bit%20Stack%20smashing%20-%20superkojiman/poc_local.py">poc_local.py</a> contains the code for a local exploit. In addition to the original exploit, this variant also calls <code>setreuid</code> in order to achieve privilege escalation when a vulnerable executable with the SUID bit set is exploited.</p>
-<h2 id="optimized-compilation-1">Optimized compilation</h2>
+<h2 id="optimizing-compilation-1">Optimizing compilation</h2>
 <p>As with the executables from the <a href="#smashing-the-stack-for-fun-and-profit---aleph1">Aleph1 exploits</a>, no compiler optimizations were activated during the compilation of the executables used for the three parts of the tutorial. With optimizations enabled (<code>-O3</code> flag), the exploits have to be conducted a little bit different, which is explained in the following.</p>
 <h3 id="part-1-1">Part 1</h3>
 <p>The <a href="#part-1">first part</a> was just about overflowing a buffer and overwriting the return address with the address of an environment variable on the stack. The main difference here is that GCC tries to keep some variables only in registers if possible when optimization is enabled.</p>
@@ -614,7 +614,7 @@ The solution is to disable RELRO by passing the additional linker flag <code>-z 
 <p>In conclusion, an exploit is possible (commands <code>./ret2dtors &quot;$(./shellcode)&quot; &quot;$(python3 -c &quot;import sys; sys.stdout.buffer.write(b'\x68\xb1\x04\x08' + b'A' * 45724 + b'%hn')&quot;)&quot;</code> or <code>./ret2dtors &quot;$(./shellcode)&quot; &quot;$(python3 -c &quot;import sys; sys.stdout.buffer.write(b'\x68\xb1\x04\x08 %.45722x %1$.hn')&quot;)&quot;</code> where <code>shellcode</code> is a helper executable just outputting shellcode (see <a href="./ASLR%20Smack%20and%20Laugh%20reference%20-%20Tilo%20Mueller/shellcode.c">shellcode.c</a>)) but only with severe changes.<br />
 Firstly, it is not possible to use the heap. We have to rely on an array in the <code>.bss</code> or <code>.data</code> section (c.f. <a href="#ret2bss">ret2bss</a> and <a href="#ret2data">ret2data</a>), i.e. a global array.<br />
 Secondly, we have to link the executable with RELRO disabled.</p>
-<h2 id="optimized-compilation-2">Optimized compilation</h2>
+<h2 id="optimizing-compilation-2">Optimizing compilation</h2>
 <p>By default, no compiler optimizations were enabled during building all the executables (i.e. <code>-O0</code> compiler flag which is active by default in GCC). This section describes the differences that occur when recompiling the executables with the <code>-O3</code> compiler flag, i.e. GCC’s highest optimization options enabled. The term “differences” here refers to necessary changes in the code basis or command line commands to get the exploits to work or to significant interesting changes in program or memory layout.</p>
 <h3 id="return-into-non-randomized-memory-1">Return into non-randomized memory</h3>
 <p>For the <code>ret2text</code> executable, the only necessary change is to lower the padding by 4 bytes and change the address we want to jump to. This is because the optimized compilation output omits saving the <code>rbp</code> register to the stack (i.e. saving the frame pointer). Thus, the return address lies directly after the 12 bytes buffer on the stack. In addition, the address for the <code>secret</code> function changes because GCC rearranges the functions.<br />
@@ -851,7 +851,7 @@ Secondly, we here have a buffer of size 256 bytes that we overflow with a maximu
 <p>As long as we allocate enough memory in the first place, our shellcode is basically not restricted in length. The original payload shrinks down from around 770 bytes to around 490 bytes.<br />
 Apart from the shorter payload and the basically unrestricted length of the shellcode, the other restrictions as explained above still apply.</p>
 <p>All in all, a single buffer overflow vulnerability in a server application can lead to arbitrary code execution. However, at least in our case, there are several prerequisites which make the exploit possible, namely binary operations instead of string operations (i.e. <code>read</code> and <code>write</code>), the distinguishability between a successful call to the server (returns “OK”) and a crash, the huge amount of data to be read over the network for the initial overflow (1024 bytes), etc.</p>
-<h2 id="optimized-compilation-3">Optimized compilation</h2>
+<h2 id="optimizing-compilation-3">Optimizing compilation</h2>
 <p>Similar to the previous sections, the results differ when compiling with compiler optimizations enabled via the <code>-O3</code> compiler flag.</p>
 <h3 id="stack-analysis---getcanary-and-getcanarythreaded-1">Stack analysis - <code>getCanary</code> and <code>getCanaryThreaded</code></h3>
 <p>Those two executables still work just as <a href="#stack-analysis---getcanary-and-getcanarythreaded">previously</a> described. The only difference is that the stack layout is a little bit different because some stack variables were optimized away and/or are now only kept in registers.</p>
